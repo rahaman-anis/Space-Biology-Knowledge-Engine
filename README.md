@@ -39,13 +39,13 @@ Evidence-driven decision support for Moon/Mars missions. Built with Next.js (App
 
 ## Folder map
 
-\\\
+```
 app/…           # routes (App Router)
 components/…    # UI components
 lib/…           # fetchers, RAG, security, telemetry
 types/…         # shared types
 docs/…          # ops/design/api/security docs
-\\\
+```
 
 ## Deployment
 
