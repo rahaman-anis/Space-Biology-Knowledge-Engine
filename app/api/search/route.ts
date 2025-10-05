@@ -1,49 +1,78 @@
+import "server-only"
 import { NextResponse } from "next/server"
-import { getSupabaseClient } from "@/lib/supabaseClient"
-import { hash256, vecLiteral } from "@/lib/hash256"
+import { createClient } from "@supabase/supabase-js"
 
-export async function POST(req: Request) {
-  const { q, k = 8, mode = "both" } = await req.json()
-  if (!q) return NextResponse.json({ ok: false, error: "q required" }, { status: 400 })
+export const runtime = "nodejs"
+export const dynamic = "force-dynamic"
 
-  const sb = getSupabaseClient()
-  if (!sb) return NextResponse.json({ ok: false, error: "supabase not configured" }, { status: 500 })
+const URL = process.env.NEXT_PUBLIC_SUPABASE_URL!
+const ANON = process.env.NEXT_PUBLIC_SUPABASE_ANON_KEY!
+const VEC_DIM = Number(process.env.NEXT_PUBLIC_VECTOR_DIM || 256)
 
-  const vec = vecLiteral(hash256(q))
-  const wantDocs = mode === "both" || mode === "documents"
-  const wantPass = mode === "both" || mode === "passages"
-
-  const docs = wantDocs
-    ? await sb.rpc("match_documents", { query_embedding: vec, match_count: Number(k) })
-    : { data: [], error: null }
-  const pass = wantPass
-    ? await sb.rpc("match_passages", { query_embedding: vec, match_count: Math.min(12, Number(k) * 2) })
-    : { data: [], error: null }
-
-  if (docs.error || pass.error) {
-    return NextResponse.json(
-      {
-        ok: false,
-        stage: docs.error ? "match_documents" : "match_passages",
-        error: (docs.error || pass.error)?.message,
-      },
-      { status: 502 },
-    )
+function hash256(text: string, dim = 256): number[] {
+  const v = new Array(dim).fill(0)
+  const toks = text.toLowerCase().split(/\W+/).filter(Boolean)
+  for (const t of toks) {
+    let h = 2166136261 >>> 0
+    for (let i = 0; i < t.length; i++) {
+      h ^= t.charCodeAt(i)
+      h = Math.imul(h, 16777619) >>> 0
+    }
+    v[h % dim] += 1
   }
-
-  return NextResponse.json({ ok: true, query: q, k, documents: docs.data ?? [], passages: pass.data ?? [] })
+  const norm = Math.sqrt(v.reduce((s, x) => s + x * x, 0)) || 1
+  return v.map((x) => x / norm)
 }
 
-export async function GET(req: Request) {
-  const u = new URL(req.url)
-  const q = u.searchParams.get("q") || ""
-  const k = Number(u.searchParams.get("k") || 8)
-  const mode = u.searchParams.get("mode") || "both"
-  return POST(
-    new Request(req.url, {
-      method: "POST",
-      headers: { "content-type": "application/json" },
-      body: JSON.stringify({ q, k, mode }),
-    }),
-  )
+export async function POST(req: Request) {
+  try {
+    if (!URL || !ANON) {
+      return NextResponse.json({ ok: false, error: "Supabase env vars missing" }, { status: 200 })
+    }
+    const supabase = createClient(URL, ANON, { auth: { persistSession: false } })
+    const body = await req.json().catch(() => ({}))
+
+    const q = (body.q ?? "").toString().trim()
+    if (!q) {
+      return NextResponse.json({ ok: true, results: [] }, { status: 200 })
+    }
+
+    const mode: "passages" | "documents" = body.mode ?? "passages"
+    const topK = Math.max(1, Math.min(20, Number(body.topK ?? 8)))
+    const vec = hash256(q, VEC_DIM)
+
+    if (mode === "documents") {
+      const { data, error } = await supabase.rpc("match_documents", {
+        query_embedding: vec,
+        match_count: topK,
+      })
+      if (error) return NextResponse.json({ ok: false, error: error.message }, { status: 200 })
+      const results = (data ?? []).map((r: any) => ({
+        pmcid: r.pmcid,
+        title: r.title ?? null,
+        year: r.year ?? null,
+        score: r.score,
+        type: "document" as const,
+      }))
+      return NextResponse.json({ ok: true, results }, { status: 200 })
+    }
+
+    // passages (default)
+    const { data, error } = await supabase.rpc("match_passages", {
+      query_embedding: vec,
+      match_count: topK,
+    })
+    if (error) return NextResponse.json({ ok: false, error: error.message }, { status: 200 })
+
+    const results = (data ?? []).map((r: any) => ({
+      pmcid: r.pmcid,
+      section: r.section ?? "All",
+      snippet: r.snippet ?? "",
+      score: r.score,
+      type: "passage" as const,
+    }))
+    return NextResponse.json({ ok: true, results }, { status: 200 })
+  } catch (e: any) {
+    return NextResponse.json({ ok: false, error: String(e?.message || e) }, { status: 200 })
+  }
 }

@@ -1,5 +1,6 @@
 @import "tailwindcss";
-@import "tw-animate-css";
+
+/* Removed @import "tw-animate-css" which causes CSS parsing errors */
 
 /* Tailwind v4 supports .dark class by default without custom variant */
 

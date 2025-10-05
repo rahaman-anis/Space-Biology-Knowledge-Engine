@@ -1,10 +1,11 @@
+import "server-only"
 import { NextResponse } from "next/server"
-import Groq from "groq-sdk"
 import { buildSynthesisPrompt } from "@/lib/rag/prompt"
 import type { RetrievedPassage, ChatRequestDTO } from "@/lib/rag/types"
 import { allow, keyFromRequest, chatRule } from "@/lib/security/rateLimit"
 
-const groq = new Groq({ apiKey: process.env.GROQ_API_KEY! })
+export const runtime = "nodejs"
+export const dynamic = "force-dynamic"
 
 async function telemetry(ev: {
   type: string
@@ -95,14 +96,29 @@ export async function POST(req: Request) {
     // 2) Build prompt
     const prompt = buildSynthesisPrompt(question, passages)
 
-    // 3) Call Groq
-    const comp = await groq.chat.completions.create({
-      model: "llama-3.1-70b-versatile",
-      temperature: 0.2,
-      max_tokens: 900,
-      messages: [{ role: "user", content: prompt }],
+    const groqKey = process.env.GROQ_API_KEY
+    if (!groqKey) throw new Error("GROQ_API_KEY missing")
+
+    const groqRes = await fetch("https://api.groq.com/openai/v1/chat/completions", {
+      method: "POST",
+      headers: {
+        Authorization: `Bearer ${groqKey}`,
+        "Content-Type": "application/json",
+      },
+      body: JSON.stringify({
+        model: process.env.GROQ_MODEL || "llama-3.3-70b-versatile",
+        temperature: 0.2,
+        max_tokens: 900,
+        messages: [{ role: "user", content: prompt }],
+      }),
     })
 
+    if (!groqRes.ok) {
+      const errText = await groqRes.text().catch(() => "")
+      throw new Error(`Groq HTTP ${groqRes.status}: ${errText}`)
+    }
+
+    const comp = await groqRes.json()
     const raw = comp.choices?.[0]?.message?.content ?? ""
 
     // 4) Parse JSON
