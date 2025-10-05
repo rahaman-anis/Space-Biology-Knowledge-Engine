@@ -4,11 +4,13 @@ export function buildCSP() {
 
   const directives: Record<string, string[]> = {
     "default-src": ["'self'"],
-    "script-src": ["'self'"], // no 'unsafe-inline' — all scripts via bundler
+    "script-src": ["'self'", "'unsafe-inline'", "'unsafe-eval'", "blob:"],
     "style-src": ["'self'", "'unsafe-inline'"], // allow inline styles for Tailwind preflight/SSR
-    "img-src": ["'self'", "data:", "blob:"],
+    "img-src": ["*", "data:", "blob:"],
     "font-src": ["'self'", "data:"],
-    "connect-src": ["'self'", "https://api.groq.com"],
+    "connect-src": ["*"],
+    "worker-src": ["'self'", "blob:"],
+    "frame-src": ["*"],
     "frame-ancestors": ["'none'"], // disallow embedding
     "base-uri": ["'self'"],
     "form-action": ["'self'"],
@@ -16,9 +18,10 @@ export function buildCSP() {
     "upgrade-insecure-requests": [],
   }
 
+  // Supabase is already covered by wildcard connect-src and img-src
+  // but we keep this for documentation purposes
   if (supabase) {
-    directives["connect-src"].push(supabase)
-    directives["img-src"].push(supabase)
+    // Already covered by * wildcards above
   }
 
   // turn into header string
