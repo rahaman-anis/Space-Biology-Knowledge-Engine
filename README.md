@@ -9,11 +9,11 @@ Evidence-driven decision support for Moon/Mars missions. Built with Next.js (App
    - `NEXT_PUBLIC_SUPABASE_ANON_KEY`
    - `GROQ_API_KEY`
 2. **Install & run**
-   \`\`\`bash
+   ```bash
    pnpm i
    pnpm dev
    # or: npm i && npm run dev
-   \`\`\`
+   ```
 
 ## Sanity checks
 
@@ -39,13 +39,13 @@ Evidence-driven decision support for Moon/Mars missions. Built with Next.js (App
 
 ## Folder map
 
-\`\`\`
+\\\
 app/…           # routes (App Router)
 components/…    # UI components
 lib/…           # fetchers, RAG, security, telemetry
 types/…         # shared types
 docs/…          # ops/design/api/security docs
-\`\`\`
+\\\
 
 ## Deployment
 
