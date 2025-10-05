@@ -1,0 +1,14 @@
+export default function RootHomeShim() {
+  return (
+    <main className="mx-auto max-w-3xl p-8">
+      <h1 className="text-2xl font-bold">Space Biology Knowledge Engine</h1>
+      <p className="text-gray-700 mt-2">Temporary home shim so Preview loads.</p>
+      <nav className="mt-4 flex flex-wrap gap-3">
+        <a className="text-blue-700 underline" href="/aria">Ask ARIA</a>
+        <a className="text-blue-700 underline" href="/evidence">Explore Topics</a>
+        <a className="text-blue-700 underline" href="/gaps">Identify Gaps</a>
+        <a className="text-blue-700 underline" href="/graph">Map Evidence</a>
+      </nav>
+    </main>
+  )
+}
