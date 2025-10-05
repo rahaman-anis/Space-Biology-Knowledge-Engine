@@ -387,6 +387,8 @@ export async function dsDocsByTopic(topic: string, limit = 50) {
         year: 2023,
         topic,
         organism: "Homo sapiens",
+        section: "Results",
+        confidence: 0.85,
       },
       {
         pmcid: "PMC7654321",
@@ -394,6 +396,8 @@ export async function dsDocsByTopic(topic: string, limit = 50) {
         year: 2022,
         topic,
         organism: "Homo sapiens",
+        section: "Discussion",
+        confidence: 0.72,
       },
     ]
   }
@@ -407,9 +411,12 @@ export async function dsDocsByTopic(topic: string, limit = 50) {
     return []
   }
 
-  const selectFields = `pmcid,title,year,${col},organism_normalized`
-
   try {
+    // First get documents matching the topic
+    const selectFields = `pmcid,title,year,${col},organism_normalized`
+
+    let docs: any[] = []
+
     // Try exact match first
     const exact = await client
       .from(TABLES.DOCUMENTS)
@@ -419,30 +426,58 @@ export async function dsDocsByTopic(topic: string, limit = 50) {
       .limit(limit)
 
     if (!exact.error && exact.data?.length) {
-      return exact.data
+      docs = exact.data
+    } else {
+      // If array column, use contains
+      const arr = await client
+        .from(TABLES.DOCUMENTS)
+        .select(selectFields)
+        .contains(col as any, [topic])
+        .order("year", { ascending: false })
+        .limit(limit)
+
+      if (!arr.error && arr.data?.length) {
+        docs = arr.data
+      } else {
+        // Fallback ilike
+        const ilike = await client
+          .from(TABLES.DOCUMENTS)
+          .select(selectFields)
+          .ilike(col as any, `%${topic}%`)
+          .order("year", { ascending: false })
+          .limit(limit)
+
+        docs = ilike.data || []
+      }
     }
 
-    // If array column, use contains
-    const arr = await client
-      .from(TABLES.DOCUMENTS)
-      .select(selectFields)
-      .contains(col as any, [topic])
-      .order("year", { ascending: false })
-      .limit(limit)
+    // Added section and confidence fields from claims table for each document
+    const pmcids = docs.map((d) => d.pmcid)
+    if (pmcids.length > 0) {
+      const { data: claims } = await client.from(TABLES.CLAIMS).select("pmcid,section,confidence").in("pmcid", pmcids)
 
-    if (!arr.error && arr.data?.length) {
-      return arr.data
+      // Create a map of pmcid -> {section, confidence}
+      const claimsMap = new Map()
+      if (claims) {
+        for (const claim of claims) {
+          if (!claimsMap.has(claim.pmcid)) {
+            claimsMap.set(claim.pmcid, {
+              section: claim.section,
+              confidence: claim.confidence,
+            })
+          }
+        }
+      }
+
+      // Merge claims data into documents
+      docs = docs.map((doc) => ({
+        ...doc,
+        section: claimsMap.get(doc.pmcid)?.section || null,
+        confidence: claimsMap.get(doc.pmcid)?.confidence || null,
+      }))
     }
 
-    // Fallback ilike
-    const ilike = await client
-      .from(TABLES.DOCUMENTS)
-      .select(selectFields)
-      .ilike(col as any, `%${topic}%`)
-      .order("year", { ascending: false })
-      .limit(limit)
-
-    return ilike.data || []
+    return docs
   } catch (err) {
     console.error("[dsDocsByTopic] Exception:", err)
     return []

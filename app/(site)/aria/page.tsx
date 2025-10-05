@@ -6,7 +6,7 @@ export default function AriaPage() {
   return (
     <PageLayout
       title="Ask ARIA"
-      subtitle="Section-aware Q&A with evidence citations and contradiction detection"
+      subtitle="Agentic Research Intelligence Assistant - Section-aware Q&A with evidence citations and contradiction detection"
       breadcrumbs={[{ label: "Home", href: "/" }, { label: "Ask ARIA" }]}
     >
       <AriaSearch />

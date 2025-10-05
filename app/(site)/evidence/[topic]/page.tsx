@@ -44,8 +44,14 @@ export default async function TopicPage({ params }: { params: { topic: string } 
             rows={rows.map((r) => ({
               id: r.pmcid,
               sourceId: r.pmcid,
-              section: "Results" as const,
-              confidence: "High" as const,
+              section: (r.section || "Results") as const,
+              confidence: r.confidence
+                ? r.confidence >= 0.8
+                  ? "High"
+                  : r.confidence >= 0.5
+                    ? "Medium"
+                    : "Low"
+                : ("Medium" as const),
               date: r.year ? String(r.year) + "-01-01" : "",
               title: r.title || "(untitled)",
             }))}

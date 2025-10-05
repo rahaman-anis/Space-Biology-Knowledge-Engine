@@ -36,9 +36,21 @@ export default function SearchSection() {
   return (
     <section className="py-16 bg-white">
       <div className="max-w-4xl mx-auto px-6 text-center">
-        <h2 className="text-3xl sm:text-4xl font-heading font-bold text-gray-900 mb-4">
-          Ask ARIA anything about space biology evidence
-        </h2>
+        <div className="flex items-center justify-center gap-3 mb-4">
+          <h2 className="text-3xl sm:text-4xl font-heading font-bold text-gray-900">
+            Ask ARIA anything about space biology evidence
+          </h2>
+          <div className="relative group">
+            <button className="w-6 h-6 rounded-full bg-gray-200 text-gray-600 flex items-center justify-center hover:bg-gray-300 transition-colors text-sm font-bold">
+              ?
+            </button>
+            <div className="absolute left-1/2 -translate-x-1/2 bottom-full mb-2 hidden group-hover:block w-72 bg-gray-900 text-white text-sm rounded-lg p-4 shadow-xl z-10">
+              <strong>ARIA</strong>: Agentic Research Intelligence Assistant
+              <br />
+              AI-powered search across 572 NASA studies with section-aware retrieval
+            </div>
+          </div>
+        </div>
 
         <p className="text-lg text-gray-600 mb-8">
           Section-aware answers with citations, confidence and contradiction detection

@@ -1,54 +1,26 @@
 "use client"
 
 import { useEffect, useState } from "react"
-import dynamic from "next/dynamic"
-
-const HeroGraph3D = dynamic(() => import("./HeroGraph3D"), { ssr: false })
 
 export default function HeroSection() {
   const [reducedMotion, setReducedMotion] = useState(false)
-  const [isDesktop, setIsDesktop] = useState(false)
-  const [pageHidden, setPageHidden] = useState(false)
-
-  const feature3D = (process.env.NEXT_PUBLIC_FEATURE_3D_GRAPH ?? "").toLowerCase() === "true"
-  const use3D = feature3D && isDesktop && !reducedMotion && !pageHidden
 
   useEffect(() => {
     const mqRM = window.matchMedia("(prefers-reduced-motion: reduce)")
     setReducedMotion(mqRM.matches)
     const onChangeRM = (e: MediaQueryListEvent) => setReducedMotion(e.matches)
     mqRM.addEventListener?.("change", onChangeRM)
-
-    const mqDesk = window.matchMedia("(min-width: 768px)")
-    setIsDesktop(mqDesk.matches)
-    const onChangeDesk = (e: MediaQueryListEvent) => setIsDesktop(e.matches)
-    mqDesk.addEventListener?.("change", onChangeDesk)
-
-    const onVis = () => setPageHidden(document.hidden)
-    document.addEventListener("visibilitychange", onVis)
-
-    return () => {
-      mqRM.removeEventListener?.("change", onChangeRM)
-      mqDesk.removeEventListener?.("change", onChangeDesk)
-      document.removeEventListener("visibilitychange", onVis)
-    }
+    return () => mqRM.removeEventListener?.("change", onChangeRM)
   }, [])
 
   return (
-    <section
-      className="relative min-h-[700px]"
-      style={{ background: "linear-gradient(135deg, #0042A6 0%, #07173F 100%)" }}
-    >
-      {/* Background astronaut image (right side, faded) */}
-      <div className="absolute right-0 top-0 bottom-0 w-1/2 opacity-30">
-        <img src="/astronaut-in-space-suit-floating.jpg" alt="" className="w-full h-full object-cover" />
-      </div>
-
-      {/* Contrast overlay for better text readability */}
-      <div className="absolute inset-0 bg-gradient-to-b from-black/25 via-black/15 to-transparent" />
-
-      <div className="relative max-w-7xl mx-auto px-6 py-24 lg:w-1/2">
-        <div className="lg:w-1/2">
+    <section className="w-full relative">
+      <div
+        className="w-full grid grid-cols-1 lg:grid-cols-2 items-center min-h-[700px]"
+        style={{ background: "linear-gradient(135deg, #0042A6 0%, #07173F 100%)" }}
+      >
+        {/* Left column: Text content */}
+        <div className="px-6 lg:px-16 py-16 lg:py-24 relative z-10">
           <h1 className="text-6xl lg:text-7xl font-heading font-black text-white mb-8 leading-tight">
             Know what we know.
             <br />
@@ -78,6 +50,15 @@ export default function HeroSection() {
               <div className="text-lg text-white font-semibold uppercase tracking-wide">Publications</div>
             </div>
           </div>
+        </div>
+
+        {/* Right column: Astronaut image */}
+        <div className="relative min-h-[420px] lg:min-h-[640px]">
+          <div className="absolute inset-0 opacity-40">
+            <img src="/astronaut-in-space-suit-floating.jpg" alt="" className="w-full h-full object-cover" />
+          </div>
+          {/* Gradient overlay for better blend */}
+          <div className="absolute inset-0 bg-gradient-to-l from-transparent via-[#07173F]/30 to-[#07173F]" />
         </div>
       </div>
     </section>
