@@ -1,181 +1,332 @@
 "use client"
 
-import { useState, useEffect } from "react"
+import { useState, useEffect, useRef } from "react"
 import { PageLayout } from "@/components/layout/PageLayout"
-import EmptyState from "@/components/common/EmptyState"
+import * as d3 from "d3"
 import { Loader2, AlertCircle } from "lucide-react"
-import dynamic from "next/dynamic"
 
-const ForceGraph = dynamic(() => import("@/components/graph/ForceGraph").then((m) => ({ default: m.ForceGraph })), {
-  ssr: false,
-  loading: () => (
-    <div className="flex items-center justify-center h-[520px] bg-gray-50 rounded-lg">
-      <Loader2 className="h-8 w-8 animate-spin text-primary-600" />
-    </div>
-  ),
-})
+interface Node extends d3.SimulationNodeDatum {
+  id: string
+  label: string
+  type: string
+  topic?: string
+}
+
+interface Edge {
+  source: string | Node
+  target: string | Node
+  relation: string
+  predicate?: string
+  confidence?: number
+}
 
 interface GraphData {
-  nodes: any[]
-  edges: any[]
+  nodes: Node[]
+  edges: Edge[]
   meta?: { count?: { nodes?: number; edges?: number } }
 }
 
 export default function GraphPage() {
-  const [data, setData] = useState<GraphData | null>(null)
+  const svgRef = useRef<SVGSVGElement>(null)
+  const [graphData, setGraphData] = useState<GraphData | null>(null)
   const [loading, setLoading] = useState(true)
   const [error, setError] = useState<string | null>(null)
-
+  const [selectedTopic, setSelectedTopic] = useState<string>("all")
+  const [selectedRelation, setSelectedRelation] = useState<string>("all")
   const [limit, setLimit] = useState(200)
-  const [minConfidence, setMinConfidence] = useState(0.6)
-  const [topic, setTopic] = useState("")
 
+  // Fetch graph data
   useEffect(() => {
-    fetchGraph()
-  }, [limit, minConfidence, topic])
+    const fetchGraph = async () => {
+      setLoading(true)
+      setError(null)
 
-  const fetchGraph = async () => {
-    setLoading(true)
-    setError(null)
+      try {
+        const params = new URLSearchParams()
+        if (selectedTopic !== "all") params.append("topic", selectedTopic)
+        params.append("limit", String(limit))
 
-    try {
-      const params = new URLSearchParams({
-        limit: String(limit),
-        minConfidence: String(minConfidence),
-        ...(topic && { topic }),
-      })
+        const res = await fetch(`/api/graph?${params}`)
 
-      const res = await fetch(`/api/graph?${params}`)
+        if (!res.ok) {
+          throw new Error(`Failed to load graph: ${res.statusText}`)
+        }
 
-      if (!res.ok) {
-        throw new Error(`Failed to load graph: ${res.statusText}`)
+        const json = await res.json()
+
+        if (json.nodes?.length > 2000) {
+          setError("Graph is too large. Try a narrower topic or reduce the limit.")
+          setGraphData(null)
+          return
+        }
+
+        setGraphData(json)
+      } catch (err) {
+        console.error("[v0] Graph fetch error:", err)
+        setError(err instanceof Error ? err.message : "Failed to load graph")
+        setGraphData(null)
+      } finally {
+        setLoading(false)
       }
-
-      const json = await res.json()
-
-      if (json.nodes?.length > 2000) {
-        setError("Graph is too large. Try a narrower topic or reduce the limit.")
-        setData(null)
-        return
-      }
-
-      setData(json)
-    } catch (err) {
-      console.error("[v0] Graph fetch error:", err)
-      setError(err instanceof Error ? err.message : "Failed to load graph")
-      setData(null)
-    } finally {
-      setLoading(false)
     }
+
+    fetchGraph()
+  }, [selectedTopic, limit])
+
+  // Render D3 visualization
+  useEffect(() => {
+    if (!graphData || !svgRef.current) return
+
+    const svg = d3.select(svgRef.current)
+    const width = 1200
+    const height = 800
+
+    svg.selectAll("*").remove() // Clear previous
+    svg.attr("width", width).attr("height", height)
+
+    // Filter edges by relation type
+    const edges =
+      selectedRelation === "all" ? graphData.edges : graphData.edges.filter((e) => e.relation === selectedRelation)
+
+    // Create node map
+    const nodeMap = new Map(graphData.nodes.map((n) => [n.id, n]))
+
+    // Filter edges to only include those with both nodes present
+    const validEdges = edges.filter((e) => {
+      const sourceId = typeof e.source === "string" ? e.source : e.source.id
+      const targetId = typeof e.target === "string" ? e.target : e.target.id
+      return nodeMap.has(sourceId) && nodeMap.has(targetId)
+    })
+
+    // Force simulation
+    const simulation = d3
+      .forceSimulation(graphData.nodes)
+      .force(
+        "link",
+        d3
+          .forceLink(validEdges)
+          .id((d: any) => d.id)
+          .distance(100),
+      )
+      .force("charge", d3.forceManyBody().strength(-300))
+      .force("center", d3.forceCenter(width / 2, height / 2))
+      .force("collision", d3.forceCollide().radius(20))
+
+    // Draw edges
+    const link = svg
+      .append("g")
+      .selectAll("line")
+      .data(validEdges)
+      .join("line")
+      .attr("stroke", (d) => (d.relation === "supports" ? "#16A34A" : "#DC2626"))
+      .attr("stroke-width", (d) => (d.confidence || 0.5) * 3)
+      .attr("opacity", 0.6)
+
+    // Draw nodes
+    const node = svg
+      .append("g")
+      .selectAll("circle")
+      .data(graphData.nodes)
+      .join("circle")
+      .attr("r", 8)
+      .attr("fill", (d) => {
+        const colors: Record<string, string> = {
+          bone: "#EAB308",
+          immune: "#3B82F6",
+          radiation: "#EF4444",
+          muscle: "#10B981",
+          cardiovascular: "#F43F5E",
+        }
+        return colors[d.topic || ""] || "#6B7280"
+      })
+      .attr("stroke", "#fff")
+      .attr("stroke-width", 2)
+      .style("cursor", "grab")
+      .call(d3.drag<SVGCircleElement, Node>().on("start", dragstarted).on("drag", dragged).on("end", dragended))
+
+    // Add labels
+    const label = svg
+      .append("g")
+      .selectAll("text")
+      .data(graphData.nodes)
+      .join("text")
+      .text((d) => d.label.slice(0, 20))
+      .attr("font-size", 10)
+      .attr("fill", "#374151")
+      .attr("dx", 12)
+      .attr("dy", 4)
+      .style("pointer-events", "none")
+
+    // Update positions on tick
+    simulation.on("tick", () => {
+      link
+        .attr("x1", (d: any) => d.source.x)
+        .attr("y1", (d: any) => d.source.y)
+        .attr("x2", (d: any) => d.target.x)
+        .attr("y2", (d: any) => d.target.y)
+
+      node.attr("cx", (d: any) => d.x).attr("cy", (d: any) => d.y)
+
+      label.attr("x", (d: any) => d.x).attr("y", (d: any) => d.y)
+    })
+
+    function dragstarted(event: d3.D3DragEvent<SVGCircleElement, Node, Node>) {
+      if (!event.active) simulation.alphaTarget(0.3).restart()
+      event.subject.fx = event.subject.x
+      event.subject.fy = event.subject.y
+    }
+
+    function dragged(event: d3.D3DragEvent<SVGCircleElement, Node, Node>) {
+      event.subject.fx = event.x
+      event.subject.fy = event.y
+    }
+
+    function dragended(event: d3.D3DragEvent<SVGCircleElement, Node, Node>) {
+      if (!event.active) simulation.alphaTarget(0)
+      event.subject.fx = null
+      event.subject.fy = null
+    }
+
+    // Cleanup
+    return () => {
+      simulation.stop()
+    }
+  }, [graphData, selectedRelation])
+
+  if (loading) {
+    return (
+      <PageLayout title="Evidence Knowledge Graph">
+        <div className="flex items-center justify-center py-24 bg-white rounded-xl shadow-lg">
+          <Loader2 className="h-8 w-8 animate-spin text-primary-600" />
+          <span className="ml-3 text-lg text-gray-600">Loading graph...</span>
+        </div>
+      </PageLayout>
+    )
   }
 
   return (
     <PageLayout
       title="Evidence Knowledge Graph"
-      subtitle="Visualize evidence relations (supports/contradicts) across the research corpus"
+      subtitle={graphData ? `${graphData.nodes.length} nodes • ${graphData.edges.length} relations` : ""}
       breadcrumbs={[{ label: "Home", href: "/" }, { label: "Map Evidence" }]}
     >
-      {/* Controls */}
-      <div className="bg-white rounded-xl shadow-lg p-6 mb-6">
-        <div className="grid grid-cols-1 md:grid-cols-3 gap-4">
-          <div>
-            <label className="block text-sm font-semibold text-gray-700 mb-2">Topic (optional)</label>
-            <input
-              type="text"
-              value={topic}
-              onChange={(e) => setTopic(e.target.value)}
-              placeholder="e.g., bone"
-              className="w-full px-3 py-2 border border-gray-300 rounded-lg focus:ring-2 focus:ring-primary-300 focus:border-primary-500 outline-none"
-            />
-          </div>
-          <div>
-            <label className="block text-sm font-semibold text-gray-700 mb-2">Node Limit: {limit}</label>
-            <input
-              type="range"
-              min="50"
-              max="2000"
-              step="50"
-              value={limit}
-              onChange={(e) => setLimit(Number(e.target.value))}
-              className="w-full"
-            />
-          </div>
-          <div>
-            <label className="block text-sm font-semibold text-gray-700 mb-2">
-              Min Confidence: {minConfidence.toFixed(1)}
-            </label>
-            <input
-              type="range"
-              min="0"
-              max="1"
-              step="0.1"
-              value={minConfidence}
-              onChange={(e) => setMinConfidence(Number(e.target.value))}
-              className="w-full"
-            />
-          </div>
+      {/* Filters */}
+      <div className="bg-white rounded-xl p-6 shadow-lg mb-8 flex flex-wrap gap-4">
+        <div className="flex-1 min-w-[200px]">
+          <label className="block text-sm font-semibold text-gray-700 mb-2">Topic</label>
+          <select
+            value={selectedTopic}
+            onChange={(e) => setSelectedTopic(e.target.value)}
+            className="w-full px-4 py-2 border-2 border-gray-300 rounded-lg focus:ring-2 focus:ring-primary-300 focus:border-primary-500 outline-none"
+          >
+            <option value="all">All Topics</option>
+            <option value="bone">Bone</option>
+            <option value="immune">Immune</option>
+            <option value="radiation">Radiation</option>
+            <option value="muscle">Muscle</option>
+            <option value="cardiovascular">Cardiovascular</option>
+          </select>
+        </div>
+
+        <div className="flex-1 min-w-[200px]">
+          <label className="block text-sm font-semibold text-gray-700 mb-2">Relation Type</label>
+          <select
+            value={selectedRelation}
+            onChange={(e) => setSelectedRelation(e.target.value)}
+            className="w-full px-4 py-2 border-2 border-gray-300 rounded-lg focus:ring-2 focus:ring-primary-300 focus:border-primary-500 outline-none"
+          >
+            <option value="all">All Relations</option>
+            <option value="supports">Supports Only</option>
+            <option value="contradicts">Contradicts Only</option>
+          </select>
+        </div>
+
+        <div className="flex-1 min-w-[200px]">
+          <label className="block text-sm font-semibold text-gray-700 mb-2">Node Limit: {limit}</label>
+          <input
+            type="range"
+            min="50"
+            max="500"
+            step="50"
+            value={limit}
+            onChange={(e) => setLimit(Number(e.target.value))}
+            className="w-full"
+          />
         </div>
       </div>
 
-      {/* Loading state */}
-      {loading && (
-        <div className="flex items-center justify-center py-24 bg-white rounded-xl shadow-lg">
-          <Loader2 className="h-8 w-8 animate-spin text-primary-600" />
-          <span className="ml-3 text-lg text-gray-600">Loading graph...</span>
-        </div>
-      )}
-
       {/* Error state */}
-      {error && !loading && (
-        <div className="bg-red-50 border-2 border-red-200 rounded-xl p-8">
+      {error && (
+        <div className="bg-red-50 border-2 border-red-200 rounded-xl p-8 mb-8">
           <div className="flex items-start gap-3">
             <AlertCircle className="h-6 w-6 text-red-600 flex-shrink-0 mt-0.5" />
             <div>
               <h3 className="text-lg font-bold text-red-900 mb-2">Failed to load graph</h3>
-              <p className="text-red-700 mb-4">{error}</p>
-              <p className="text-sm text-red-600">
-                Try a narrower topic, reduce the node limit, or increase the minimum confidence threshold.
-              </p>
+              <p className="text-red-700">{error}</p>
             </div>
           </div>
         </div>
       )}
 
-      {/* Empty state */}
-      {!loading && !error && data && data.nodes.length === 0 && (
-        <EmptyState
-          title="No graph data"
-          suggestions={[
-            "Try a different topic (e.g., bone, radiation)",
-            "Reduce the minimum confidence threshold",
-            "Check /api/graph-smoke for diagnostics",
-          ]}
-          actions={[
-            {
-              label: "Open graph diagnostics",
-              variant: "primary",
-              onClick: () => {
-                window.open("/api/graph-smoke?q=bone", "_blank")
-              },
-            },
-          ]}
-        />
+      {/* Graph Canvas */}
+      {!error && graphData && graphData.nodes.length > 0 && (
+        <>
+          <div className="bg-white rounded-xl shadow-lg p-4 overflow-auto mb-8">
+            <svg ref={svgRef} className="mx-auto" />
+          </div>
+
+          {/* Legend */}
+          <div className="bg-white rounded-xl p-6 shadow-lg">
+            <h3 className="text-lg font-bold text-gray-900 mb-4">Legend</h3>
+            <div className="grid md:grid-cols-2 gap-4">
+              <div>
+                <h4 className="text-sm font-semibold text-gray-700 mb-2">Relations</h4>
+                <div className="space-y-2">
+                  <div className="flex items-center gap-2">
+                    <div className="w-8 h-1 bg-green-600"></div>
+                    <span className="text-sm text-gray-700">Supports</span>
+                  </div>
+                  <div className="flex items-center gap-2">
+                    <div className="w-8 h-1 bg-red-600"></div>
+                    <span className="text-sm text-gray-700">Contradicts</span>
+                  </div>
+                </div>
+              </div>
+              <div>
+                <h4 className="text-sm font-semibold text-gray-700 mb-2">Topics</h4>
+                <div className="space-y-2">
+                  <div className="flex items-center gap-2">
+                    <div className="w-4 h-4 rounded-full bg-yellow-500"></div>
+                    <span className="text-sm text-gray-700">Bone</span>
+                  </div>
+                  <div className="flex items-center gap-2">
+                    <div className="w-4 h-4 rounded-full bg-blue-500"></div>
+                    <span className="text-sm text-gray-700">Immune</span>
+                  </div>
+                  <div className="flex items-center gap-2">
+                    <div className="w-4 h-4 rounded-full bg-red-500"></div>
+                    <span className="text-sm text-gray-700">Radiation</span>
+                  </div>
+                  <div className="flex items-center gap-2">
+                    <div className="w-4 h-4 rounded-full bg-green-500"></div>
+                    <span className="text-sm text-gray-700">Muscle</span>
+                  </div>
+                  <div className="flex items-center gap-2">
+                    <div className="w-4 h-4 rounded-full bg-pink-500"></div>
+                    <span className="text-sm text-gray-700">Cardiovascular</span>
+                  </div>
+                </div>
+              </div>
+            </div>
+          </div>
+        </>
       )}
 
-      {/* Graph visualization */}
-      {!loading && !error && data && data.nodes.length > 0 && (
-        <div className="bg-white rounded-xl shadow-lg p-8">
-          <p className="text-lg text-gray-900 mb-6">
-            Interactive graph showing how studies support or contradict each other
-            {topic && ` for "${topic}"`}
-          </p>
-
-          <ForceGraph nodes={data.nodes} edges={data.edges} />
-
-          <p className="text-sm text-gray-600 mt-4">
-            Nodes: {data.meta?.count?.nodes ?? data.nodes.length} • Edges:{" "}
-            {data.meta?.count?.edges ?? data.edges.length}
-          </p>
+      {/* Empty state */}
+      {!error && graphData && graphData.nodes.length === 0 && (
+        <div className="bg-gray-50 border-2 border-gray-200 rounded-xl p-12 text-center">
+          <p className="text-lg text-gray-600 mb-4">No graph data available</p>
+          <p className="text-sm text-gray-500">Try selecting a different topic or adjusting the filters</p>
         </div>
       )}
     </PageLayout>
