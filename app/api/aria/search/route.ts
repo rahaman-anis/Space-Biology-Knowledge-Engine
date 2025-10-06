@@ -1,27 +1,31 @@
-// app/api/aria/search/route.ts
 import "server-only";
 import { NextResponse } from "next/server";
 import { createClient } from "@supabase/supabase-js";
 
+/**
+ * Search API
+ * - POST { query?: string, embedding?: number[], k?: number, mode?: 'docs'|'passages'|'both', minScore?: number }
+ * - GET  -> health/status
+ */
+
 export const runtime = "nodejs";
 export const dynamic = "force-dynamic";
 
+// ======================== Config ========================
 const VEC_DIM = Number(process.env.NEXT_PUBLIC_VECTOR_DIM || 256);
 
-// Optional env overrides for your view names
-const DOC_VIEW = process.env.NEXT_PUBLIC_DOC_EMBEDDINGS_VIEW || "doc_embeddings";
-const PASS_VIEW = process.env.NEXT_PUBLIC_PASSAGE_EMBEDDINGS_VIEW || "passage_embeddings";
+// Views / tables (can be overridden via env)
+const DOC_EMB_VIEW =
+  process.env.NEXT_PUBLIC_DOC_EMBEDDINGS_VIEW || "doc_embeddings";
+const PASS_EMB_VIEW =
+  process.env.NEXT_PUBLIC_PASSAGE_EMBEDDINGS_VIEW || "passage_embeddings";
+const DOCS_TABLE =
+  process.env.NEXT_PUBLIC_SUPABASE_DOCS_TABLE || "documents";
 
-function json(status: number, body: any) {
-  return new Response(JSON.stringify(body), {
-    status,
-    headers: { "content-type": "application/json" },
-  });
-}
-
-function hash256(text: string, dim: number) {
+// ======================== Utils =========================
+function hash256(text: string, dim = VEC_DIM): number[] {
   const v = new Array(dim).fill(0);
-  const toks = String(text).toLowerCase().split(/\W+/).filter(Boolean);
+  const toks = text.toLowerCase().split(/\W+/).filter(Boolean);
   for (const t of toks) {
     let h = 2166136261 >>> 0;
     for (let i = 0; i < t.length; i++) {
@@ -34,125 +38,237 @@ function hash256(text: string, dim: number) {
   return v.map((x) => x / n);
 }
 
-export async function GET(req: Request) {
-  const url = process.env.NEXT_PUBLIC_SUPABASE_URL;
-  const anon = process.env.NEXT_PUBLIC_SUPABASE_ANON_KEY;
-  return json(200, {
-    ok: !!(url && anon),
-    route: "/api/aria/search",
-    env: { hasUrl: !!url, hasAnon: !!anon, vecDim: VEC_DIM },
-    views: { DOC_VIEW, PASS_VIEW },
-    hint: "POST a JSON body { query: string, k?: number, mode?: 'docs'|'passages'|'both' }",
+function scoreEuclid(a: number[], b: number[]) {
+  let d2 = 0;
+  for (let i = 0; i < a.length; i++) {
+    const dx = (a[i] || 0) - (b[i] || 0);
+    d2 += dx * dx;
+  }
+  return 1 / (1 + Math.sqrt(d2)); // (0,1]
+}
+
+function json(status: number, body: any) {
+  return new Response(JSON.stringify(body), {
+    status,
+    headers: { "Content-Type": "application/json" },
   });
 }
 
+// ======================== GET (health) ==================
+export async function GET() {
+  return json(200, {
+    ok: true,
+    route: "/api/aria/search",
+    env: {
+      hasUrl: !!process.env.NEXT_PUBLIC_SUPABASE_URL,
+      hasAnon: !!process.env.NEXT_PUBLIC_SUPABASE_ANON_KEY,
+      vecDim: VEC_DIM,
+    },
+    hint:
+      "POST a JSON body { query: string, k?: number, mode?: 'docs'|'passages'|'both' }",
+  });
+}
+
+// ======================== POST (search) =================
+type Body = {
+  query?: string;
+  embedding?: number[];
+  k?: number;
+  mode?: "docs" | "passages" | "both";
+  minScore?: number;
+};
+
 export async function POST(req: Request) {
   const t0 = Date.now();
-  const debug = new URL(req.url).searchParams.get("debug") === "1";
-  const diag: any = {};
-
   try {
-    const body = await req.json().catch(() => ({}));
-    const query = typeof body?.query === "string" ? body.query.trim() : "";
-    const k = Math.max(1, Math.min(Number(body?.k || 8), 15));
-    const mode = (body?.mode as string) || "both";
+    const body = (await req.json().catch(() => ({}))) as Body;
+    const { query, embedding, k = 8, mode = "both", minScore = 0 } = body;
 
     const url = process.env.NEXT_PUBLIC_SUPABASE_URL;
     const anon = process.env.NEXT_PUBLIC_SUPABASE_ANON_KEY;
-    if (!url || !anon) return json(500, { ok: false, error: "Supabase env vars missing" });
+    if (!url || !anon)
+      return json(500, { ok: false, error: "Supabase env vars missing" });
 
-    if (!query) return json(400, { ok: false, error: "query (string) is required" });
+    if (!Array.isArray(embedding) && !(typeof query === "string" && query.trim()))
+      return json(400, {
+        ok: false,
+        error: "Provide either 'query' (string) or 'embedding' (number[dim]).",
+      });
 
-    const vec = hash256(query, VEC_DIM);
-    const sb = createClient(url, anon, { auth: { persistSession: false } });
+    const vec: number[] = Array.isArray(embedding)
+      ? (() => {
+          if (embedding.length !== VEC_DIM)
+            throw new Error(`Embedding length ${embedding.length} != ${VEC_DIM}`);
+          return embedding.map((x) => Number(x) || 0);
+        })()
+      : hash256(query!.trim(), VEC_DIM);
+
+    const supabase = createClient(url, anon, { auth: { persistSession: false } });
 
     const needDocs = mode === "docs" || mode === "both";
     const needPass = mode === "passages" || mode === "both";
 
-    async function callRpc(name: string, args: any) {
+    async function callRpc<T>(fn: string, args: any) {
       try {
-        const { data, error } = await sb.rpc(name, args);
-        if (error) return { data: [], error: error.message };
-        return { data: Array.isArray(data) ? data : [], error: null };
+        const { data, error } = await supabase.rpc(fn, args);
+        if (error) return { data: null as T | null, error: error.message };
+        return { data: (data as T) ?? null, error: null };
       } catch (e: any) {
-        return { data: [], error: String(e?.message || e) };
+        return { data: null as T | null, error: String(e?.message || e) };
       }
     }
 
-    // 1) Try RPCs (non-fatal)
+    // 1) Try RPCs first
     const [docsRpc, passRpc] = await Promise.all([
-      needDocs ? callRpc("match_documents", { query_embedding: vec, match_count: k }) : Promise.resolve({ data: [] }),
-      needPass ? callRpc("match_passages", { query_embedding: vec, match_count: k }) : Promise.resolve({ data: [] }),
+      needDocs
+        ? callRpc<any[]>("match_documents", {
+            query_embedding: vec,
+            match_count: Math.min(Math.max(Number(k) || 8, 1), 20),
+          })
+        : Promise.resolve({ data: [] as any[], error: null }),
+      needPass
+        ? callRpc<any[]>("match_passages", {
+            query_embedding: vec,
+            match_count: Math.min(Math.max(Number(k) || 8, 1), 20),
+          })
+        : Promise.resolve({ data: [] as any[], error: null }),
     ]);
-    if (debug) diag.rpc = { docs: docsRpc.error, passages: passRpc.error };
 
-    // 2) Fallbacks (non-fatal)
-    async function fallbackDocs() {
-      try {
-        const { data, error } = await sb.from(DOC_VIEW).select("pmcid,title,year,embedding").limit(2000);
-        if (error || !Array.isArray(data)) return [];
-        const scored = data
-          .map((r: any) => {
-            const e: number[] = r.embedding || [];
-            if (!Array.isArray(e) || e.length !== VEC_DIM) return null;
-            let d2 = 0;
-            for (let i = 0; i < VEC_DIM; i++) {
-              const dx = (e[i] || 0) - vec[i];
-              d2 += dx * dx;
-            }
-            const score = 1 / (1 + Math.sqrt(d2));
-            return { pmcid: r.pmcid, title: r.title ?? null, year: r.year ?? null, section: "All", snippet: null, score };
-          })
-          .filter(Boolean) as any[];
-        return scored.sort((a, b) => b.score - a.score).slice(0, k);
-      } catch {
-        return [];
+    // 2) Fallbacks to views (if RPCs unavailable/empty)
+    async function fallbackDocs(): Promise<any[]> {
+      const { data } = await supabase
+        .from(DOC_EMB_VIEW)
+        .select("pmcid,title,year,embedding")
+        .limit(2000);
+
+      if (!Array.isArray(data)) return [];
+      const scored = data
+        .map((r: any) => {
+          const e: number[] = r.embedding || [];
+          if (e.length !== VEC_DIM) return null;
+          return {
+            pmcid: r.pmcid,
+            title: r.title ?? null,
+            year: r.year ?? null,
+            score: scoreEuclid(e, vec),
+          };
+        })
+        .filter(Boolean) as any[];
+      return scored.sort((a, b) => b.score - a.score).slice(0, k);
+    }
+
+    async function fallbackPassages(): Promise<any[]> {
+      const { data } = await supabase
+        .from(PASS_EMB_VIEW)
+        .select("pmcid,section,text,snippet,embedding")
+        .limit(3000);
+
+      if (!Array.isArray(data)) return [];
+      const scored = data
+        .map((r: any) => {
+          const e: number[] = r.embedding || [];
+          if (e.length !== VEC_DIM) return null;
+          return {
+            pmcid: r.pmcid,
+            section: r.section ?? "All",
+            text: r.text ?? r.snippet ?? null,
+            score: scoreEuclid(e, vec),
+          };
+        })
+        .filter(Boolean) as any[];
+      return scored.sort((a, b) => b.score - a.score).slice(0, k);
+    }
+
+    const docs =
+      needDocs && Array.isArray(docsRpc.data) && docsRpc.data.length
+        ? docsRpc.data
+        : needDocs
+        ? await fallbackDocs()
+        : [];
+
+    const passages =
+      needPass && Array.isArray(passRpc.data) && passRpc.data.length
+        ? passRpc.data
+        : needPass
+        ? await fallbackPassages()
+        : [];
+
+    // 3) Collect metadata (title/year) for pmcids that need it
+    const pmcids = Array.from(
+      new Set([
+        ...docs.map((d: any) => d.pmcid),
+        ...passages.map((p: any) => p.pmcid),
+      ])
+    );
+
+    const meta: Record<
+      string,
+      { title: string | null; year: string | number | null }
+    > = {};
+    if (pmcids.length) {
+      const { data: md } = await supabase
+        .from(DOCS_TABLE)
+        .select("pmcid,title,year")
+        .in("pmcid", pmcids);
+      if (Array.isArray(md)) {
+        for (const r of md) {
+          meta[r.pmcid] = { title: r.title ?? null, year: r.year ?? null };
+        }
       }
     }
 
-    async function fallbackPassages() {
-      try {
-        const { data, error } = await sb.from(PASS_VIEW).select("pmcid,section,text,embedding").limit(3000);
-        if (error || !Array.isArray(data)) return [];
-        const scored = data
-          .map((r: any) => {
-            const e: number[] = r.embedding || [];
-            if (!Array.isArray(e) || e.length !== VEC_DIM) return null;
-            let d2 = 0;
-            for (let i = 0; i < VEC_DIM; i++) {
-              const dx = (e[i] || 0) - vec[i];
-              d2 += dx * dx;
-            }
-            const score = 1 / (1 + Math.sqrt(d2));
-            return { pmcid: r.pmcid, section: r.section ?? "All", snippet: r.text ?? null, score };
-          })
-          .filter(Boolean) as any[];
-        return scored.sort((a, b) => b.score - a.score).slice(0, k);
-      } catch {
-        return [];
-      }
+    // 4) Merge into evidence items; always include 'abstract'
+    const evidences: any[] = [];
+
+    for (const p of passages) {
+      evidences.push({
+        pmcid: p.pmcid,
+        title: meta[p.pmcid]?.title ?? null,
+        year: meta[p.pmcid]?.year ?? null,
+        section: p.section ?? "All",
+        snippet: p.text ?? null,
+        abstract: null, // keep shape stable for UI
+        score: Number(p.score ?? 0),
+      });
     }
 
-    const docs = needDocs ? (docsRpc.data.length ? docsRpc.data : await fallbackDocs()) : [];
-    const passages = needPass ? (passRpc.data.length ? passRpc.data : await fallbackPassages()) : [];
+    for (const d of docs) {
+      evidences.push({
+        pmcid: d.pmcid,
+        title: d.title ?? meta[d.pmcid]?.title ?? null,
+        year: d.year ?? meta[d.pmcid]?.year ?? null,
+        section: "All",
+        snippet: null,
+        abstract: null, // keep shape stable for UI
+        score: Number(d.score ?? 0),
+      });
+    }
 
-    const evidences = [...passages, ...docs].slice(0, k);
+    const filtered = evidences
+      .filter(
+        (e) => !Number.isFinite(minScore) || Number(e.score ?? 0) >= minScore
+      )
+      .sort((a, b) => (b.score ?? 0) - (a.score ?? 0))
+      .slice(0, k);
+
     const durationMs = Date.now() - t0;
 
-    if (!evidences.length) {
+    if (!filtered.length) {
       return json(200, {
         ok: true,
         evidences: [],
         hint:
-          "No matches. Try adding section keywords (Results/Discussion) or specific terms (RANKL, EBV, ARED).",
-        rpcErrors: { match_documents: docsRpc.error, match_passages: passRpc.error },
-        ...(debug ? { diag } : {}),
+          "No matches. Try adding section keywords (Results/Discussion) or more specific terms (RANKL, EBV, ARED).",
+        rpcErrors: {
+          match_documents: docsRpc.error,
+          match_passages: passRpc.error,
+        },
         durationMs,
       });
     }
 
-    return json(200, { ok: true, evidences, ...(debug ? { diag } : {}), durationMs });
+    return json(200, { ok: true, evidences: filtered, durationMs });
   } catch (e: any) {
-    return json(200, { ok: false, error: String(e?.message || e) }); // never 500 the page
+    return json(500, { ok: false, error: String(e?.message || e) });
   }
 }

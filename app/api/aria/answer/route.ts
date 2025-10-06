@@ -1,4 +1,3 @@
-// app/api/aria/answer/route.ts
 import "server-only";
 import { NextResponse } from "next/server";
 import { createClient } from "@supabase/supabase-js";
@@ -6,20 +5,26 @@ import { createClient } from "@supabase/supabase-js";
 export const runtime = "nodejs";
 export const dynamic = "force-dynamic";
 
-// ---------- Tunables (can override via env) ----------
+// ======================== Config ========================
 const VEC_DIM = Number(process.env.NEXT_PUBLIC_VECTOR_DIM || 256);
+const DOCS_TABLE =
+  process.env.NEXT_PUBLIC_SUPABASE_DOCS_TABLE || "documents";
+const PASS_EMB_VIEW =
+  process.env.NEXT_PUBLIC_PASSAGE_EMBEDDINGS_VIEW || "passage_embeddings";
 
-// Hard caps so we never exceed Groq limits on Dev/On-Demand tiers
-const MAX_K = Number(process.env.ARIA_K_MAX || 8);                  // passages to consider (upper bound)
-const PASSAGE_CHARS = Number(process.env.ARIA_PASSAGE_CHARS || 480); // each snippet length cap
-const CONTEXT_BUDGET = Number(process.env.ARIA_CONTEXT_BUDGET_CHARS || 7000); // total chars to send
+// Allow-listed Groq models your org supports (pick via GROQ_MODEL)
+const ALLOWED_MODELS = [
+  "llama-3.3-70b-versatile",
+  "llama-3.1-8b-instant",
+  "openai/gpt-oss-20b",
+] as const;
+type AllowedModel = (typeof ALLOWED_MODELS)[number];
 
-// Preferred models in order; you can override first with GROQ_MODEL
-const MODEL_PRIMARY = process.env.GROQ_MODEL || "llama-3.3-70b-versatile";
-const MODEL_FALLBACKS = ["llama-3.3-8b-instant", "openai/gpt-oss-20b"];
+const DEFAULT_MODEL: AllowedModel =
+  (ALLOWED_MODELS.find((m) => m === process.env.GROQ_MODEL) as AllowedModel) ||
+  "llama-3.1-8b-instant";
 
-// -----------------------------------------------------
-
+// ======================== Utils =========================
 function hash256(text: string, dim = VEC_DIM): number[] {
   const v = new Array(dim).fill(0);
   const toks = text.toLowerCase().split(/\W+/).filter(Boolean);
@@ -35,239 +40,169 @@ function hash256(text: string, dim = VEC_DIM): number[] {
   return v.map((x) => x / n);
 }
 
-type Passage = {
-  pmcid?: string | null;
-  section?: string | null;
-  text?: string | null;
-  snippet?: string | null;
-  score?: number | null;
-};
-
-// collapse whitespace + remove leading section labels (“Abstract”, “Results”, numbers like “2.1.”)
-function cleanText(s: string): string {
-  const t = (s || "")
-    .replace(/^\s*(abstract|results?|discussion|introduction|methods|conclusion)s?\W*/i, "")
-    .replace(/^\s*\d+(\.\d+)*\.\s*/, "")
-    .replace(/\s+/g, " ")
-    .trim();
-  return t;
+function clip(s: string, max = 600) {
+  if (!s) return "";
+  return s.length <= max ? s : s.slice(0, max - 1) + "…";
 }
 
-function sectionRank(s: string | null | undefined): number {
-  const x = (s || "").toLowerCase();
-  if (x === "abstract") return 0;
-  if (x === "results") return 1;
-  if (x === "discussion") return 2;
-  if (x === "conclusion") return 3;
-  if (x === "introduction") return 4;
-  if (x === "methods") return 5;
-  return 6;
-}
-
-// Build trimmed, budgeted context blocks from passages
-function buildContextBlocks(passages: Passage[], budgetChars = CONTEXT_BUDGET) {
-  // dedupe by pmcid+section; prefer higher score & preferred sections
-  const byKey = new Map<string, Passage>();
-  for (const p of passages) {
-    const key = `${p.pmcid || "?"}::${p.section || "All"}`;
-    const prev = byKey.get(key);
-    if (!prev) {
-      byKey.set(key, p);
-    } else {
-      const pr = Number(prev.score ?? 0);
-      const cr = Number(p.score ?? 0);
-      if (cr > pr) byKey.set(key, p);
-    }
-  }
-  const uniq = Array.from(byKey.values());
-
-  // sort by (section preference, score desc)
-  uniq.sort((a, b) => {
-    const sa = sectionRank(a.section);
-    const sb = sectionRank(b.section);
-    if (sa !== sb) return sa - sb;
-    return (Number(b.score ?? 0) - Number(a.score ?? 0));
-  });
-
-  // trim each snippet and respect total budget
+function buildContext(passages: any[], maxChars = 9000) {
   const blocks: string[] = [];
-  let used = 0;
-
-  for (const [i, p] of uniq.entries()) {
-    const raw = (p.text ?? p.snippet ?? "") as string;
-    const snippet = cleanText(raw).slice(0, PASSAGE_CHARS);
-    if (!snippet) continue;
-
-    const head =
-      `[#${blocks.length + 1}] PMCID ${p.pmcid ?? "—"} | ${p.section ?? "All"} | score=${(p.score ?? "")
-        .toString()
-        .slice(0, 5)}\n`;
-    const block = head + snippet;
-
-    if (used + block.length > budgetChars) break;
-
-    blocks.push(block);
-    used += block.length;
+  for (let i = 0; i < passages.length; i++) {
+    const p = passages[i];
+    const line =
+      `[#${i + 1}] PMCID ${p.pmcid ?? "—"} | ${p.section ?? "All"} | score=${String(
+        p.score ?? ""
+      ).slice(0, 6)}\n` + clip(p.text ?? p.snippet ?? "", 1000);
+    blocks.push(line);
+    if (blocks.join("\n\n").length > maxChars) break;
   }
-
-  return blocks;
+  return blocks.join("\n\n");
 }
 
-async function callGroq(model: string, system: string, user: string, apiKey: string) {
-  const res = await fetch("https://api.groq.com/openai/v1/chat/completions", {
-    method: "POST",
-    headers: { Authorization: `Bearer ${apiKey}`, "Content-Type": "application/json" },
-    body: JSON.stringify({
-      model,
-      messages: [
-        { role: "system", content: system },
-        { role: "user", content: user },
-      ],
-      temperature: 0.2,
-      max_tokens: 600,
-    }),
-  });
-
-  const text = await res.text().catch(() => "");
-  let json: any = null;
-  try {
-    json = text ? JSON.parse(text) : null;
-  } catch {
-    /* ignore parse error so we can surface raw text in errors */
-  }
-
-  return { ok: res.ok, status: res.status, json, text, headers: res.headers };
-}
-
+// ======================== Handler =======================
 export async function POST(req: Request) {
   try {
-    const { question, k } = await req.json().catch(() => ({} as any));
+    const { question, k = 6 } = await req.json().catch(() => ({}));
     const url = process.env.NEXT_PUBLIC_SUPABASE_URL;
     const anon = process.env.NEXT_PUBLIC_SUPABASE_ANON_KEY;
     const groqKey = process.env.GROQ_API_KEY;
+    const modelEnv = process.env.GROQ_MODEL as AllowedModel | undefined;
+    const model =
+      (modelEnv && (ALLOWED_MODELS as readonly string[]).includes(modelEnv)
+        ? (modelEnv as AllowedModel)
+        : DEFAULT_MODEL) || "llama-3.1-8b-instant";
 
-    if (!url || !anon) {
-      return NextResponse.json({ ok: false, error: "Supabase env missing" }, { status: 500 });
-    }
-    if (!groqKey) {
-      return NextResponse.json({ ok: false, error: "GROQ_API_KEY missing" }, { status: 500 });
-    }
-    if (!question || typeof question !== "string") {
-      return NextResponse.json({ ok: false, error: "question (string) is required" }, { status: 400 });
-    }
+    if (!url || !anon)
+      return NextResponse.json(
+        { ok: false, error: "Supabase env missing" },
+        { status: 500 }
+      );
+    if (!groqKey)
+      return NextResponse.json(
+        { ok: false, error: "GROQ_API_KEY missing" },
+        { status: 500 }
+      );
+    if (!question || typeof question !== "string")
+      return NextResponse.json(
+        { ok: false, error: "question (string) is required" },
+        { status: 400 }
+      );
 
     const supabase = createClient(url, anon, { auth: { persistSession: false } });
+
+    // --- Retrieve evidence passages (RPC preferred, fallback to view) ---
     const embedding = hash256(question);
 
-    // pull passages via RPC (server-side)
-    const kWanted = Math.max(3, Math.min(Number(k || 6), MAX_K));
-    const { data: passages, error } = await supabase.rpc("match_passages", {
-      query_embedding: embedding,
-      match_count: kWanted,
-    });
-
-    if (error) {
-      return NextResponse.json({ ok: false, error: `match_passages: ${error.message}` }, { status: 500 });
-    }
-
-    const list = (Array.isArray(passages) ? passages : []) as Passage[];
-    const blocks = buildContextBlocks(list, CONTEXT_BUDGET);
-
-    // If we still don’t have context, say so early (UI will show evidences panel anyway)
-    if (!blocks.length) {
-      return NextResponse.json({
-        ok: true,
-        model: MODEL_PRIMARY,
-        answer:
-          "I couldn’t find passages relevant enough in the indexed corpus to answer confidently. Try refining the question (e.g., add ‘Results’/‘Discussion’ or specific markers like RANKL, EBV, ARED).",
-        citations: [],
-      });
-    }
-
-    const system = [
-      "You are ARIA, a careful assistant for space biology evidence.",
-      "Answer concisely in natural language, then add in-text bracketed citations like [#1][#3].",
-      "Cite only the provided context blocks.",
-      "If evidence is weak or absent, say so explicitly.",
-    ].join(" ");
-
-    const user = [
-      `Question: ${question}`,
-      `Context:\n${blocks.join("\n\n")}`,
-      "Instructions: Start with a direct 1-2 sentence answer. Then provide 2-5 bullet points each with citations. End with a one-line conclusion.",
-    ].join("\n\n");
-
-    // Try primary model, then degrade on size/rate errors with smaller budgets/models
-    const modelOrder = [MODEL_PRIMARY, ...MODEL_FALLBACKS];
-    let answerText: string | null = null;
-    let usedModel = modelOrder[0];
-    let budget = CONTEXT_BUDGET;
-
-    for (const model of modelOrder) {
-      usedModel = model;
-
-      // first attempt with current budget
-      let { ok, status, json, text } = await callGroq(model, system, user, groqKey);
-
-      // On 413/429, shrink the budget once and retry model once
-      if (!ok && (status === 413 || status === 429)) {
-        budget = Math.floor(budget * 0.6);
-        const smallerBlocks = buildContextBlocks(list, budget);
-        const smallerUser = [
-          `Question: ${question}`,
-          `Context:\n${smallerBlocks.join("\n\n")}`,
-          "Instructions: Start with a direct 1-2 sentence answer. Then provide 2-5 bullet points each with citations. End with a one-line conclusion.",
-        ].join("\n\n");
-
-        ({ ok, status, json, text } = await callGroq(model, system, smallerUser, groqKey));
-      }
-
-      if (ok) {
-        const content = json?.choices?.[0]?.message?.content ?? "";
-        answerText = (content || "").trim();
-        if (answerText) break;
-      }
-
-      // On other errors, continue to next model
-      if (!ok && (status === 413 || status === 429)) {
-        // continue to next model
-      } else if (!ok && model !== modelOrder[modelOrder.length - 1]) {
-        continue;
-      } else if (!ok) {
-        const errBody = json ? JSON.stringify(json) : text;
-        return NextResponse.json(
-          { ok: false, error: `Groq HTTP ${status}: ${errBody}` },
-          { status: 500 }
-        );
+    async function rpcPassages() {
+      try {
+        const { data, error } = await supabase.rpc("match_passages", {
+          query_embedding: embedding,
+          match_count: Math.min(Math.max(Number(k) || 6, 3), 12),
+        });
+        if (error) return [] as any[];
+        return Array.isArray(data) ? data : [];
+      } catch {
+        return [] as any[];
       }
     }
 
-    if (!answerText) {
+    async function viewPassages() {
+      const { data } = await supabase
+        .from(PASS_EMB_VIEW)
+        .select("pmcid,section,text,snippet,embedding")
+        .limit(2000);
+      // No vector re-ranking here; we already did a cheap hash embedding.
+      return (Array.isArray(data) ? data : []).slice(0, Math.max(3, Number(k) || 6));
+    }
+
+    const passages = await (async () => {
+      const rpc = await rpcPassages();
+      if (rpc.length) return rpc;
+      return await viewPassages();
+    })();
+
+    // Get titles/years for display (best-effort)
+    const pmcids = Array.from(new Set(passages.map((p: any) => p.pmcid))).slice(
+      0,
+      50
+    );
+    const meta: Record<string, { title: string | null; year: string | number | null }> =
+      {};
+    if (pmcids.length) {
+      const { data: md } = await supabase
+        .from(DOCS_TABLE)
+        .select("pmcid,title,year")
+        .in("pmcid", pmcids);
+      if (Array.isArray(md)) {
+        for (const r of md) meta[r.pmcid] = { title: r.title ?? null, year: r.year ?? null };
+      }
+    }
+
+    // --- Build trimmed context to avoid 413/TPM limits ---
+    const context = buildContext(passages, 9000);
+
+    const system =
+      "You are ARIA, a careful assistant that answers with citations from the supplied context only. " +
+      "Give a concise answer first, then 3–6 bullet points. After factual claims, add citations like [#1][#3]. " +
+      "If context is insufficient, say so explicitly.";
+
+    const user =
+      `Question: ${question}\n\nContext:\n${context}\n\n` +
+      "Instructions: Use only the context above. Include citations like [#1] that match the blocks.";
+
+    // --- Groq call ---
+    const groqRes = await fetch(
+      "https://api.groq.com/openai/v1/chat/completions",
+      {
+        method: "POST",
+        headers: {
+          Authorization: `Bearer ${groqKey}`,
+          "Content-Type": "application/json",
+        },
+        body: JSON.stringify({
+          model,
+          messages: [
+            { role: "system", content: system },
+            { role: "user", content: user },
+          ],
+          temperature: 0.2,
+          max_tokens: 500, // keep response lean to stay within TPM
+        }),
+      }
+    );
+
+    if (!groqRes.ok) {
+      const errText = await groqRes.text().catch(() => "");
       return NextResponse.json(
-        { ok: false, error: "LLM returned empty response" },
+        { ok: false, error: `Groq HTTP ${groqRes.status}: ${errText}` },
         { status: 500 }
       );
     }
 
-    // Build simple citations list (index aligns to blocks order)
-    const citations = blocks.map((b, i) => {
-      const line1 = b.split("\n", 1)[0]; // "[#n] PMCID XXX | section | score="
-      const m = line1.match(/PMCID\s+([^\s|]+)/i);
-      const s = line1.match(/\|\s+([A-Za-z]+)\s+\|/);
-      return {
-        i: i + 1,
-        pmcid: m ? m[1] : null,
-        section: s ? s[1] : null,
-      };
-    });
+    const groqData = await groqRes.json();
+    const answer = (groqData.choices?.[0]?.message?.content || "").trim();
+
+    // Return citations list for UI
+    const citations = (passages || []).map((p: any, i: number) => ({
+      i: i + 1,
+      pmcid: p?.pmcid ?? null,
+      section: p?.section ?? "All",
+      title: meta[p?.pmcid || ""]?.title ?? null,
+      year: meta[p?.pmcid || ""]?.year ?? null,
+      score: p?.score ?? null,
+    }));
 
     return NextResponse.json({
       ok: true,
-      model: usedModel,
-      answer: answerText,
+      model,
+      answer,
+      contextCount: passages.length,
       citations,
     });
   } catch (e: any) {
-    return NextResponse.json({ ok: false, error: String(e?.message || e) }, { status: 500 });
+    return NextResponse.json(
+      { ok: false, error: String(e?.message || e) },
+      { status: 500 }
+    );
   }
 }
