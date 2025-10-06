@@ -1,52 +1,44 @@
 // /app/api/aria/search/route.ts
-import { createClient } from "@supabase/supabase-js";
-import { VEC_DIM, hash256 } from "@/lib/server/hash256";
-import { assertNodeRuntime } from "@/lib/server/assert-node";
+import { NextResponse } from "next/server"
+import { createClient } from "@supabase/supabase-js"
+import { VEC_DIM, hash256 } from "@/lib/server/hash256"
 
-export const runtime = "nodejs";
-export const dynamic = "force-dynamic";
-assertNodeRuntime("/api/aria/search");
+export const runtime = "nodejs"
+export const dynamic = "force-dynamic"
 
 type Body = {
-  query?: string;
-  embedding?: number[];
-  k?: number; // default 8
-  mode?: "docs" | "passages" | "both"; // default both
-  minScore?: number; // default 0
-};
-
-function json(status: number, body: any) {
-  return new Response(JSON.stringify(body), {
-    status,
-    headers: { "Content-Type": "application/json", "Cache-Control": "no-store" },
-  });
+  query?: string
+  embedding?: number[]
+  k?: number // default 8
+  mode?: "docs" | "passages" | "both" // default both
+  minScore?: number // default 0
 }
 
 function scoreEuclid(a: number[], b: number[]) {
   // 1 / (1 + L2) in (0,1]; safe & monotonic
-  let d2 = 0;
-  const n = Math.min(a.length, b.length, VEC_DIM);
+  let d2 = 0
+  const n = Math.min(a.length, b.length, VEC_DIM)
   for (let i = 0; i < n; i++) {
-    const dx = (a[i] || 0) - (b[i] || 0);
-    d2 += dx * dx;
+    const dx = (a[i] || 0) - (b[i] || 0)
+    d2 += dx * dx
   }
-  return 1 / (1 + Math.sqrt(d2));
+  return 1 / (1 + Math.sqrt(d2))
 }
 
 // Try multiple candidates so we work with either schema
 const PASSAGE_VIEW_CANDIDATES = [
   process.env.NEXT_PUBLIC_PASSAGE_EMBEDDINGS_VIEW, // preferred via env
-  "passage_embeddings",                            // old view name
-  "text_embeddings",                               // current table in your DB
-].filter(Boolean) as string[];
+  "passage_embeddings", // old view name
+  "text_embeddings", // current table in your DB
+].filter(Boolean) as string[]
 
 const DOCS_TABLE_CANDIDATES = [
-  process.env.NEXT_PUBLIC_DOC_EMBEDDINGS_VIEW,     // preferred via env
-  "doc_embeddings",                                // typical table for doc vectors
-].filter(Boolean) as string[];
+  process.env.NEXT_PUBLIC_DOC_EMBEDDINGS_VIEW, // preferred via env
+  "doc_embeddings", // typical table for doc vectors
+].filter(Boolean) as string[]
 
 export async function GET() {
-  return json(200, {
+  return NextResponse.json({
     ok: true,
     route: "/api/aria/search",
     env: {
@@ -56,49 +48,87 @@ export async function GET() {
       passageViewCandidates: PASSAGE_VIEW_CANDIDATES,
       docViewCandidates: DOCS_TABLE_CANDIDATES,
     },
-    hint:
-      "POST a JSON body { query: string, k?: number, mode?: 'docs'|'passages'|'both', minScore?: number }",
-  });
+    hint: "POST a JSON body { query: string, k?: number, mode?: 'docs'|'passages'|'both', minScore?: number }",
+  })
 }
 
 export async function POST(req: Request) {
-  const t0 = Date.now();
+  const t0 = Date.now()
   try {
-    const { query, embedding, k = 8, mode = "both", minScore = 0 } =
-      (await req.json().catch(() => ({}))) as Body;
+    console.log("[v0] /api/aria/search POST started")
 
-    const url = process.env.NEXT_PUBLIC_SUPABASE_URL;
-    const anon = process.env.NEXT_PUBLIC_SUPABASE_ANON_KEY;
-    if (!url || !anon) return json(500, { ok: false, error: "Supabase env vars missing" });
+    let body: Body = {}
+    try {
+      body = await req.json()
+    } catch (e) {
+      console.error("[v0] Failed to parse request body:", e)
+      return NextResponse.json({ ok: false, error: "Invalid JSON body" }, { status: 400 })
+    }
+
+    const { query, embedding, k = 8, mode = "both", minScore = 0 } = body
+
+    console.log("[v0] Request params:", { query, hasEmbedding: !!embedding, k, mode, minScore })
+
+    const url = process.env.NEXT_PUBLIC_SUPABASE_URL
+    const anon = process.env.NEXT_PUBLIC_SUPABASE_ANON_KEY
+
+    console.log("[v0] Supabase config:", { hasUrl: !!url, hasAnon: !!anon })
+
+    if (!url || !anon) {
+      console.error("[v0] Missing Supabase env vars")
+      return NextResponse.json({ ok: false, error: "Supabase env vars missing" }, { status: 500 })
+    }
 
     if (!Array.isArray(embedding) && !(typeof query === "string" && query.trim())) {
-      return json(400, { ok: false, error: "Provide either 'query' or 'embedding'." });
+      console.error("[v0] Invalid request: no query or embedding")
+      return NextResponse.json({ ok: false, error: "Provide either 'query' or 'embedding'." }, { status: 400 })
     }
 
     // Build vector
-    const vec: number[] = Array.isArray(embedding)
-      ? (() => {
-          if (embedding.length !== VEC_DIM)
-            throw new Error(`Embedding length ${embedding.length} != ${VEC_DIM}`);
-          return embedding.map((x) => Number(x) || 0);
-        })()
-      : hash256(query!.trim(), VEC_DIM);
+    console.log("[v0] Building vector...")
+    let vec: number[]
+    try {
+      vec = Array.isArray(embedding)
+        ? (() => {
+            if (embedding.length !== VEC_DIM) {
+              console.error(`[v0] Embedding length mismatch: ${embedding.length} != ${VEC_DIM}`)
+              throw new Error(`Embedding length ${embedding.length} != ${VEC_DIM}`)
+            }
+            return embedding.map((x) => Number(x) || 0)
+          })()
+        : hash256(query!.trim(), VEC_DIM)
+    } catch (e: any) {
+      console.error("[v0] Vector creation failed:", e)
+      return NextResponse.json({ ok: false, error: `Vector creation failed: ${e.message}` }, { status: 400 })
+    }
 
-    const supabase = createClient(url, anon, { auth: { persistSession: false } });
+    console.log("[v0] Vector created, length:", vec.length)
 
-    const needDocs = mode === "docs" || mode === "both";
-    const needPass = mode === "passages" || mode === "both";
+    const supabase = createClient(url, anon, { auth: { persistSession: false } })
+
+    const needDocs = mode === "docs" || mode === "both"
+    const needPass = mode === "passages" || mode === "both"
+
+    console.log("[v0] Search mode:", { needDocs, needPass })
 
     async function withRpc<T>(fn: string, args: any): Promise<{ data?: T; error?: any }> {
       try {
-        const { data, error } = await supabase.rpc(fn, args);
-        return { data, error };
+        console.log(`[v0] Calling RPC: ${fn}`)
+        const { data, error } = await supabase.rpc(fn, args)
+        if (error) {
+          console.error(`[v0] RPC ${fn} error:`, error)
+        } else {
+          console.log(`[v0] RPC ${fn} success, rows:`, Array.isArray(data) ? data.length : "N/A")
+        }
+        return { data, error }
       } catch (e: any) {
-        return { error: { message: String(e?.message || e) } };
+        console.error(`[v0] RPC ${fn} exception:`, e)
+        return { error: { message: String(e?.message || e) } }
       }
     }
 
     // ---------- RPC first ----------
+    console.log("[v0] Starting RPC calls...")
     const [docsRpc, passRpc] = await Promise.all([
       needDocs
         ? withRpc<any[]>("match_documents", { query_embedding: vec, match_count: k })
@@ -106,107 +136,131 @@ export async function POST(req: Request) {
       needPass
         ? withRpc<any[]>("match_passages", { query_embedding: vec, match_count: k })
         : Promise.resolve({ data: [] }),
-    ]);
+    ])
 
     // ---------- Fallbacks ----------
     async function queryDocsFallback(): Promise<any[]> {
+      console.log("[v0] Trying docs fallback...")
       for (const view of DOCS_TABLE_CANDIDATES) {
         try {
-          const { data, error } = await supabase
-            .from(view)
-            .select("pmcid,title,year,embedding")
-            .limit(1500);
-          if (error || !Array.isArray(data) || data.length === 0) continue;
+          console.log(`[v0] Trying docs view: ${view}`)
+          const { data, error } = await supabase.from(view).select("pmcid,title,year,embedding").limit(1500)
+          if (error) {
+            console.error(`[v0] Docs view ${view} error:`, error)
+            continue
+          }
+          if (!Array.isArray(data) || data.length === 0) {
+            console.log(`[v0] Docs view ${view} returned no data`)
+            continue
+          }
 
+          console.log(`[v0] Docs view ${view} returned ${data.length} rows`)
           const scored = data
             .map((r: any) => {
-              const e: number[] = r.embedding || [];
-              if (e.length !== VEC_DIM) return null;
+              const e: number[] = r.embedding || []
+              if (e.length !== VEC_DIM) return null
               return {
                 pmcid: r.pmcid,
                 title: r.title ?? null,
                 year: r.year ?? null,
                 score: scoreEuclid(e, vec),
-              };
+              }
             })
-            .filter(Boolean) as any[];
-          if (scored.length) return scored.sort((a, b) => b.score - a.score).slice(0, k);
-        } catch {
-          // try next candidate
+            .filter(Boolean) as any[]
+          if (scored.length) {
+            console.log(`[v0] Docs fallback scored ${scored.length} results`)
+            return scored.sort((a, b) => b.score - a.score).slice(0, k)
+          }
+        } catch (e) {
+          console.error(`[v0] Docs view ${view} exception:`, e)
         }
       }
-      return [];
+      console.log("[v0] Docs fallback found nothing")
+      return []
     }
 
     async function queryPassagesView(view: string): Promise<any[] | null> {
-      // Try a few select shapes to accommodate different schemas without throwing
       const selects = [
         "pmcid,section,text,snippet,chunk,content,embedding",
         "pmcid,section,text,embedding",
         "pmcid,section,content,embedding",
         "pmcid,section,chunk,embedding",
         "pmcid,section,embedding",
-      ];
+      ]
       for (const sel of selects) {
-        const { data, error } = await supabase.from(view).select(sel).limit(3000);
-        if (error) continue;
-        if (Array.isArray(data) && data.length) return data as any[];
+        const { data, error } = await supabase.from(view).select(sel).limit(3000)
+        if (error) {
+          console.error(`[v0] Passages view ${view} select ${sel} error:`, error)
+          continue
+        }
+        if (Array.isArray(data) && data.length) {
+          console.log(`[v0] Passages view ${view} select ${sel} returned ${data.length} rows`)
+          return data as any[]
+        }
       }
-      return null;
+      return null
     }
 
     async function fallbackPassages(): Promise<any[]> {
+      console.log("[v0] Trying passages fallback...")
       for (const view of PASSAGE_VIEW_CANDIDATES) {
         try {
-          const data = await queryPassagesView(view);
-          if (!data || !data.length) continue;
+          console.log(`[v0] Trying passages view: ${view}`)
+          const data = await queryPassagesView(view)
+          if (!data || !data.length) continue
 
           const rows = data
             .map((r: any) => {
-              const e: number[] = r.embedding || [];
-              if (e.length !== VEC_DIM) return null;
-              // Prefer text; then snippet/content/chunk if present
-              const txt = r.text ?? r.snippet ?? r.content ?? r.chunk ?? null;
+              const e: number[] = r.embedding || []
+              if (e.length !== VEC_DIM) return null
+              const txt = r.text ?? r.snippet ?? r.content ?? r.chunk ?? null
               return {
                 pmcid: r.pmcid,
                 section: r.section ?? "All",
                 text: txt,
                 score: scoreEuclid(e, vec),
-              };
+              }
             })
-            .filter(Boolean) as any[];
+            .filter(Boolean) as any[]
 
-          if (rows.length) return rows.sort((a, b) => b.score - a.score).slice(0, k);
-        } catch {
-          // try next candidate
+          if (rows.length) {
+            console.log(`[v0] Passages fallback scored ${rows.length} results`)
+            return rows.sort((a, b) => b.score - a.score).slice(0, k)
+          }
+        } catch (e) {
+          console.error(`[v0] Passages view ${view} exception:`, e)
         }
       }
-      return [];
+      console.log("[v0] Passages fallback found nothing")
+      return []
     }
 
-    const docs =
-      needDocs ? (Array.isArray(docsRpc.data) ? docsRpc.data : await queryDocsFallback()) : [];
-    const passages =
-      needPass ? (Array.isArray(passRpc.data) ? passRpc.data : await fallbackPassages()) : [];
+    console.log("[v0] Processing results...")
+    const docs = needDocs ? (Array.isArray(docsRpc.data) ? docsRpc.data : await queryDocsFallback()) : []
+    const passages = needPass ? (Array.isArray(passRpc.data) ? passRpc.data : await fallbackPassages()) : []
+
+    console.log(`[v0] Results: ${docs.length} docs, ${passages.length} passages`)
 
     // ---------- Collect metadata for titles/years ----------
-    const pmcids = Array.from(
-      new Set([
-        ...docs.map((d: any) => d.pmcid),
-        ...passages.map((p: any) => p.pmcid),
-      ]),
-    ).filter(Boolean);
+    const pmcids = Array.from(new Set([...docs.map((d: any) => d.pmcid), ...passages.map((p: any) => p.pmcid)])).filter(
+      Boolean,
+    )
 
-    const meta: Record<string, { title: string | null; year: string | number | null }> = {};
+    console.log(`[v0] Fetching metadata for ${pmcids.length} PMCIDs`)
+
+    const meta: Record<string, { title: string | null; year: string | number | null }> = {}
     if (pmcids.length) {
-      const { data } = await supabase.from("documents").select("pmcid,title,year").in("pmcid", pmcids);
-      if (Array.isArray(data)) {
-        for (const r of data) meta[r.pmcid] = { title: r.title ?? null, year: r.year ?? null };
+      const { data, error } = await supabase.from("documents").select("pmcid,title,year").in("pmcid", pmcids)
+      if (error) {
+        console.error("[v0] Metadata fetch error:", error)
+      } else if (Array.isArray(data)) {
+        console.log(`[v0] Fetched metadata for ${data.length} documents`)
+        for (const r of data) meta[r.pmcid] = { title: r.title ?? null, year: r.year ?? null }
       }
     }
 
     // ---------- Merge + filter ----------
-    const evidences: any[] = [];
+    const evidences: any[] = []
     for (const p of passages)
       evidences.push({
         pmcid: p.pmcid,
@@ -215,7 +269,7 @@ export async function POST(req: Request) {
         section: p.section ?? "All",
         snippet: p.text ?? p.snippet ?? null,
         score: typeof p.score === "number" ? p.score : Number(p.score ?? 0) || 0,
-      });
+      })
     for (const d of docs)
       evidences.push({
         pmcid: d.pmcid,
@@ -224,33 +278,37 @@ export async function POST(req: Request) {
         section: "All",
         snippet: null,
         score: typeof d.score === "number" ? d.score : Number(d.score ?? 0) || 0,
-      });
+      })
 
     const filtered = evidences
       .filter((e) => !Number.isFinite(minScore) || (e.score ?? 0) >= (minScore as number))
       .sort((a, b) => (b.score ?? 0) - (a.score ?? 0))
-      .slice(0, k);
+      .slice(0, k)
 
-    const durationMs = Date.now() - t0;
+    console.log(`[v0] Filtered to ${filtered.length} evidences`)
+
+    const durationMs = Date.now() - t0
 
     if (!filtered.length) {
-      // Surface *why* RPCs failed, if they did
       const rpcErrors = {
         match_documents: docsRpc.error?.message || null,
         match_passages: passRpc.error?.message || null,
-      };
-      return json(200, {
+      }
+      console.log("[v0] No results found, returning hint")
+      return NextResponse.json({
         ok: true,
         evidences: [],
-        hint:
-          "No matches. Try adding section keywords (Results/Discussion) or more specific terms (RANKL, EBV, ARED).",
+        hint: "No matches. Try adding section keywords (Results/Discussion) or more specific terms (RANKL, EBV, ARED).",
         rpcErrors,
         durationMs,
-      });
+      })
     }
 
-    return json(200, { ok: true, evidences: filtered, durationMs });
+    console.log(`[v0] Search completed successfully in ${durationMs}ms`)
+    return NextResponse.json({ ok: true, evidences: filtered, durationMs })
   } catch (e: any) {
-    return json(500, { ok: false, error: String(e?.message || e) });
+    console.error("[v0] Search API error:", e)
+    console.error("[v0] Error stack:", e?.stack)
+    return NextResponse.json({ ok: false, error: String(e?.message || e) }, { status: 500 })
   }
 }

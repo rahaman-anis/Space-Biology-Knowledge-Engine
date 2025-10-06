@@ -38,8 +38,9 @@ export function EvidenceAccordion({ results }: Props) {
     if (r.title && r.title !== "Untitled" && r.title.trim().length > 0) {
       return r.title
     }
-    // Fallback to first 80 chars of abstract or generic title
-    const abstractText = r.sections.abstract || r.sections.introduction || ""
+    // Fallback to first 80 chars of any available section text or generic title
+    const sections = r.sections || {}
+    const abstractText = sections.abstract || sections.introduction || sections.results || ""
     if (abstractText.length > 80) {
       return abstractText.slice(0, 80) + "..."
     }
@@ -57,6 +58,8 @@ export function EvidenceAccordion({ results }: Props) {
         {results.map((r, i) => {
           const displayTitle = getDisplayTitle(r)
           const shortTitle = displayTitle.length > 80 ? displayTitle.slice(0, 80) + "..." : displayTitle
+          const sections = r.sections || {}
+          const hasSections = Object.keys(sections).length > 0
 
           return (
             <Accordion.Item
@@ -124,46 +127,54 @@ export function EvidenceAccordion({ results }: Props) {
                   <div className="h-px bg-gray-200" />
 
                   {/* Section Excerpts */}
-                  <div>
-                    <h5 className="text-lg font-bold text-gray-900 mb-3 flex items-center gap-2">
-                      <FileText className="w-5 h-5" />
-                      SECTION EXCERPTS
-                    </h5>
-                    <div className="space-y-4">
-                      {Object.entries(r.sections).map(([sec, txt]) => {
-                        const sectionName = sec.charAt(0).toUpperCase() + sec.slice(1)
-                        const isPrimary = sec === r.primary_section
-                        const displayText = txt || "Excerpt not available for this section"
+                  {hasSections ? (
+                    <div>
+                      <h5 className="text-lg font-bold text-gray-900 mb-3 flex items-center gap-2">
+                        <FileText className="w-5 h-5" />
+                        SECTION EXCERPTS
+                      </h5>
+                      <div className="space-y-4">
+                        {Object.entries(sections).map(([sec, txt]) => {
+                          const sectionName = sec.charAt(0).toUpperCase() + sec.slice(1)
+                          const isPrimary = sec === r.primary_section
+                          const displayText = txt || "Excerpt not available for this section"
 
-                        return (
-                          <div key={sec} className="bg-gray-50 rounded-lg p-4 border border-gray-200">
-                            <div className="flex items-center justify-between mb-2">
-                              <h6 className="font-bold text-base text-gray-900 flex items-center gap-2">
-                                [{sectionName}]
-                                {isPrimary && <span className="text-sm text-blue-600">⭐ Primary Evidence</span>}
-                              </h6>
-                              {txt && (
-                                <Dialog>
-                                  <DialogTrigger asChild>
-                                    <button
-                                      onClick={(e) => {
-                                        e.stopPropagation()
-                                        setModalSection({ section: sectionName, text: txt })
-                                      }}
-                                      className="text-sm text-blue-600 hover:underline font-medium"
-                                    >
-                                      Read full {sectionName} →
-                                    </button>
-                                  </DialogTrigger>
-                                </Dialog>
-                              )}
+                          return (
+                            <div key={sec} className="bg-gray-50 rounded-lg p-4 border border-gray-200">
+                              <div className="flex items-center justify-between mb-2">
+                                <h6 className="font-bold text-base text-gray-900 flex items-center gap-2">
+                                  [{sectionName}]
+                                  {isPrimary && <span className="text-sm text-blue-600">⭐ Primary Evidence</span>}
+                                </h6>
+                                {txt && (
+                                  <Dialog>
+                                    <DialogTrigger asChild>
+                                      <button
+                                        onClick={(e) => {
+                                          e.stopPropagation()
+                                          setModalSection({ section: sectionName, text: txt })
+                                        }}
+                                        className="text-sm text-blue-600 hover:underline font-medium"
+                                      >
+                                        Read full {sectionName} →
+                                      </button>
+                                    </DialogTrigger>
+                                  </Dialog>
+                                )}
+                              </div>
+                              <p className="text-base text-gray-700 leading-relaxed">{displayText}</p>
                             </div>
-                            <p className="text-base text-gray-700 leading-relaxed">{displayText}</p>
-                          </div>
-                        )
-                      })}
+                          )
+                        })}
+                      </div>
                     </div>
-                  </div>
+                  ) : (
+                    <div className="bg-gray-50 rounded-lg p-4 border border-gray-200">
+                      <p className="text-base text-gray-700">
+                        Section details not available. View the full paper for complete information.
+                      </p>
+                    </div>
+                  )}
 
                   {/* Why this result */}
                   {r.why_ranked && (

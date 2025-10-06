@@ -1,6 +1,7 @@
 "use client"
 
 import type { EvidenceRow, SectionType, Confidence } from "./schema"
+import type { Lowercase } from "typescript"
 
 export type SearchParams = {
   q: string
@@ -38,15 +39,26 @@ export async function searchPassages(params: SearchParams): Promise<SearchResult
     const data = await r.json()
 
     if (data.ok && Array.isArray(data.evidences)) {
-      const results: EvidenceRow[] = data.evidences.map((e: any) => ({
-        pmcid: e.pmcid,
-        title: e.title || "Untitled",
-        year: e.year || null,
-        section: e.section || "Unknown",
-        snippet: e.snippet || "[No passage text available]",
-        score: e.score || 0,
-        confidence: "Medium" as Confidence,
-      }))
+      const results: EvidenceRow[] = data.evidences.map((e: any) => {
+        const snippet = e.snippet || e.text || "[No passage text available]"
+        const section = (e.section || "Unknown") as SectionType
+        const sectionKey = section.toLowerCase() as Lowercase<SectionType>
+
+        return {
+          pmcid: e.pmcid,
+          title: e.title || "Untitled",
+          year: e.year || null,
+          section,
+          snippet,
+          score: e.score || 0,
+          confidence: "Medium" as Confidence,
+          relevance: e.score || 0,
+          sections: {
+            [sectionKey]: snippet,
+          } as Partial<Record<Lowercase<SectionType>, string>>,
+          primary_section: sectionKey,
+        }
+      })
       return { ok: true, results, hint: data.hint, examples: data.examples }
     }
     return { ok: false, error: "Invalid response format" }
@@ -98,16 +110,26 @@ export async function askAnswer(question: string): Promise<AnswerResult> {
 
     const answerData = await answerRes.json()
     if (answerData.ok && answerData.answer) {
-      // Convert evidences to EvidenceRow format
-      const evidence: EvidenceRow[] = evidences.map((e: any) => ({
-        pmcid: e.pmcid,
-        title: e.title || "Untitled",
-        year: e.year || null,
-        section: e.section || "Unknown",
-        snippet: e.snippet || "[No passage text available]",
-        score: e.score || 0,
-        confidence: "Medium" as Confidence,
-      }))
+      const evidence: EvidenceRow[] = evidences.map((e: any) => {
+        const snippet = e.snippet || e.text || "[No passage text available]"
+        const section = (e.section || "Unknown") as SectionType
+        const sectionKey = section.toLowerCase() as Lowercase<SectionType>
+
+        return {
+          pmcid: e.pmcid,
+          title: e.title || "Untitled",
+          year: e.year || null,
+          section,
+          snippet,
+          score: e.score || 0,
+          confidence: "Medium" as Confidence,
+          relevance: e.score || 0,
+          sections: {
+            [sectionKey]: snippet,
+          } as Partial<Record<Lowercase<SectionType>, string>>,
+          primary_section: sectionKey,
+        }
+      })
 
       return { ok: true, answer: answerData.answer, evidence, model: answerData.model }
     }
