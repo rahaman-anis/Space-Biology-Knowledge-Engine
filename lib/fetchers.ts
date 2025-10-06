@@ -38,13 +38,17 @@ export async function fetchDocuments(filters: SearchFilters = {}): Promise<Resul
     return createEmptyResult([])
   }
 
-  const { limit = 50, offset = 0, yearFrom, yearTo, query } = filters
+  const { limit = 50, offset = 0, yearFrom, yearTo, query, topic } = filters
 
   return wrapQuery(async () => {
     let queryBuilder = supabase
       .from(TABLES.DOCS)
       .select(buildSelectString("DOCS"))
       .range(offset, offset + limit - 1)
+
+    if (topic) {
+      queryBuilder = queryBuilder.eq(COLUMNS.DOCS.TOPIC, topic)
+    }
 
     // Apply year filters
     if (yearFrom) {

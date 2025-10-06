@@ -10,7 +10,7 @@
 
 ## /api/chat (POST)
 - Body: `{ question: string, k?: number }`
-- Flow: retrieve → Groq synth (`llama-3.1-70b-versatile`) → JSON payload
+- Flow: retrieve → Groq synth (`llama-3.3-70b-versatile`) → JSON payload
 - Result: `{ payload: AssistantPayload }`
 
 ## /api/subgraph (GET) *(stub)*

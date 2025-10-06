@@ -20,7 +20,7 @@ export default function SearchPage() {
     setError(null)
     setResults([])
     try {
-      const res = await fetch("/api/search", {
+      const res = await fetch("/api/aria/search", {
         method: "POST",
         headers: { "Content-Type": "application/json" },
         body: JSON.stringify({ q, mode, topK }),

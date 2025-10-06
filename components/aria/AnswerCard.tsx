@@ -1,167 +1,150 @@
 "use client"
 
-import { Badge } from "@/components/ui/Badge"
-import { MethodsPopover } from "@/components/ui/MethodsPopover"
-import ProvenanceStrip from "@/components/common/ProvenanceStrip"
-import { HEURISTICS_VERSION } from "@/lib/heuristics"
+import { Loader2, AlertTriangle } from "lucide-react"
 
-export type EvidenceSection = "Results" | "Discussion" | "Methods"
-export type Band = "High" | "Medium" | "Low"
-export type Consensus = "Strong" | "Mixed" | "Conflicted"
-
-export interface EvidenceItem {
-  id: string
-  section: EvidenceSection
+interface AnswerCardProps {
+  isStreaming: boolean
   text: string
-  citations: { pmcid?: string; ntrsId?: string }[]
-  year?: number
-  method?: "in-vivo" | "in-vitro" | "in-silico"
+  error: string | null
 }
 
-export interface AnswerCardProps {
-  title: string
-  summary: string
-  confidence: Band
-  consensus: Consensus
-  coverageCount?: number
-  freshnessText?: string
-  confidenceInterval?: [number, number]
-  evidence: EvidenceItem[]
-  provenance?: { pmcid?: string; ntrsId?: string; taskbookId?: string; osdrIds?: string[] }
-  onShowContradictions?: () => void
-  onOpenSubgraph?: () => void
-  onOpenARIA?: () => void
-  onAddToBrief?: () => void
-  onExportCitation?: () => void
-}
-
-const SECTION_ICON: Record<EvidenceSection, string> = {
-  Results: "📊",
-  Discussion: "📝",
-  Methods: "🧪",
-}
-
-export default function AnswerCard(p: AnswerCardProps) {
-  const {
-    title,
-    summary,
-    confidence,
-    consensus,
-    coverageCount,
-    freshnessText,
-    confidenceInterval,
-    evidence,
-    provenance,
-    onShowContradictions,
-    onOpenSubgraph,
-    onOpenARIA,
-    onAddToBrief,
-    onExportCitation,
-  } = p
-
-  return (
-    <div className="rounded-lg bg-white shadow-md p-6">
-      <div className="flex flex-wrap items-center justify-between gap-3">
-        <h2 className="font-heading text-xl text-gray-900">{title}</h2>
-        <div className="flex flex-wrap items-center gap-2">
-          <Badge variant={confidence as any}>{`${confidence} Confidence`}</Badge>
-          <Badge variant={consensus as any}>{`${consensus} Consensus`}</Badge>
-          {confidenceInterval && (
-            <span className="inline-flex items-center rounded px-2 py-1 text-xs bg-gray-50 text-gray-700">
-              {Math.round(confidenceInterval[0] * 100)}–{Math.round(confidenceInterval[1] * 100)}%
-            </span>
-          )}
-          {coverageCount != null && <span className="text-xs text-gray-700">Based on {coverageCount} studies</span>}
-          <a
-            href="/methods#confidence"
-            className="text-xs text-primary-600 hover:underline focus-visible:ring-2 focus-visible:ring-primary-300 rounded"
-          >
-            How computed (v{HEURISTICS_VERSION})
-          </a>
-          {freshnessText && <span className="text-xs text-gray-700">• Updated {freshnessText}</span>}
-          <MethodsPopover source="confidence" />
+export function AnswerCard({ isStreaming, text, error }: AnswerCardProps) {
+  if (error) {
+    return (
+      <div className="rounded-2xl border-2 border-red-300 bg-red-50 p-8" data-testid="aria-answer-card">
+        <div className="flex items-start gap-4">
+          <AlertTriangle className="w-8 h-8 text-red-600 flex-shrink-0 mt-1" />
+          <div className="flex-1">
+            <h3 className="text-xl font-bold text-red-900 mb-3">Unable to generate answer</h3>
+            <p className="text-base text-red-800 mb-4">{error}</p>
+            <p className="text-base text-gray-900 font-semibold">Showing evidence below.</p>
+          </div>
         </div>
       </div>
+    )
+  }
 
-      <p className="text-sm text-gray-900 mt-3">{summary}</p>
+  if (!text && !isStreaming) {
+    return null
+  }
 
-      <div className="mt-4 divide-y divide-gray-200">
-        {evidence.length === 0 ? (
-          <div className="mt-2 rounded border border-gray-200 bg-gray-50 p-4">
-            <p className="text-sm text-gray-700">Insufficient section-tagged evidence.</p>
-          </div>
-        ) : (
-          evidence.map((item) => {
-            const old = item.year && item.year <= new Date().getFullYear() - 5
-            return (
-              <div key={item.id} className="flex items-start gap-3 py-3">
-                <span aria-hidden className="text-sm">
-                  {SECTION_ICON[item.section]}
-                </span>
-                <Badge variant={item.section as any}>{item.section}</Badge>
-                <div className={`flex-1 ${old ? "opacity-70" : ""}`}>
-                  <p className="text-sm text-gray-900">{item.text}</p>
-                  <div className="mt-1 flex items-center gap-3 text-xs text-gray-700">
-                    {item.year && <span>({item.year})</span>}
-                    {item.method && <span className="rounded px-1.5 py-0.5 bg-gray-100">{item.method}</span>}
-                    {item.citations?.length ? (
-                      <span>
-                        <sup>
-                          {item.citations.map((c, i) => (
-                            <span key={i} className="mono">
-                              {c?.pmcid ?? c?.ntrsId}
-                              {i < item.citations.length - 1 ? ", " : ""}
-                            </span>
-                          ))}
-                        </sup>
-                      </span>
-                    ) : null}
-                  </div>
-                </div>
-              </div>
-            )
-          })
-        )}
+  // Parse the answer into sections
+  const parseAnswer = () => {
+    const lines = text.split("\n").filter(Boolean)
+    let verdict = ""
+    const keyFindings: string[] = []
+    const mechanisticInsight = ""
+    const evidenceGaps = ""
+    let sources = ""
+
+    for (const line of lines) {
+      // Check for verdict (Yes/No/Inconclusive)
+      const verdictMatch = line.match(/^\*\*(Yes|No|Inconclusive)\*\*/)
+      if (verdictMatch) {
+        verdict = verdictMatch[1]
+        const rest = line.slice(verdictMatch[0].length).trim()
+        if (rest) keyFindings.push(rest)
+        continue
+      }
+
+      // Check for Sources line
+      if (line.startsWith("Sources:")) {
+        sources = line.slice(8).trim()
+        continue
+      }
+
+      // Check for section headers
+      if (line.includes("Key Findings") || line.includes("Mechanistic Insight") || line.includes("Evidence Gaps")) {
+        continue
+      }
+
+      // Otherwise, add to key findings
+      keyFindings.push(line)
+    }
+
+    return { verdict, keyFindings, mechanisticInsight, evidenceGaps, sources }
+  }
+
+  const { verdict, keyFindings, sources } = parseAnswer()
+
+  // Render inline citations
+  const renderTextWithCitations = (text: string) => {
+    const parts = text.split(/(\[PMC\d+(?:,\s*[A-Za-z]+)?\])/g)
+    return parts.map((part, i) => {
+      if (part.match(/\[PMC\d+/)) {
+        return (
+          <span key={i} className="font-mono text-xs bg-blue-100 text-blue-700 px-2 py-0.5 rounded">
+            {part}
+          </span>
+        )
+      }
+      return <span key={i}>{part}</span>
+    })
+  }
+
+  return (
+    <div
+      className="bg-white rounded-2xl border-2 border-blue-200 aria-card-shadow-lg p-8 space-y-6"
+      data-testid="aria-answer-card"
+    >
+      {/* Header */}
+      <div className="flex items-center gap-3 pb-4 border-b-2 border-gray-200">
+        <div className="w-12 h-12 rounded-full bg-blue-100 flex items-center justify-center flex-shrink-0">
+          <span className="text-2xl">🤖</span>
+        </div>
+        <h3 className="text-2xl font-bold text-gray-900">ARIA RESPONSE</h3>
       </div>
 
-      {provenance && (
-        <div className="mt-4">
-          <ProvenanceStrip {...provenance} dense />
+      {/* Verdict */}
+      {verdict && (
+        <div className="bg-blue-50 rounded-xl p-6 border-2 border-blue-200">
+          <p className="text-3xl font-bold text-blue-600 mb-2">{verdict}</p>
         </div>
       )}
 
-      <div className="mt-4 flex flex-wrap gap-2">
-        <button
-          onClick={onOpenARIA}
-          className="rounded bg-primary-600 text-white px-3 py-2 focus-visible:ring-2 focus-visible:ring-primary-300"
-        >
-          Open in ARIA
-        </button>
-        <button
-          onClick={onShowContradictions}
-          className="rounded border-2 border-primary-600 text-primary-600 px-3 py-2 hover:bg-primary-600 hover:text-white focus-visible:ring-2 focus-visible:ring-primary-300"
-        >
-          Show Contradictions
-        </button>
-        <button
-          onClick={onOpenSubgraph}
-          className="rounded bg-gray-100 px-3 py-2 focus-visible:ring-2 focus-visible:ring-primary-300"
-        >
-          Open Subgraph
-        </button>
-        <button
-          onClick={onAddToBrief}
-          className="rounded bg-gray-100 px-3 py-2 focus-visible:ring-2 focus-visible:ring-primary-300"
-        >
-          Add to Brief
-        </button>
-        <button
-          onClick={onExportCitation}
-          className="rounded bg-gray-100 px-3 py-2 focus-visible:ring-2 focus-visible:ring-primary-300"
-        >
-          Export Citation
-        </button>
-      </div>
+      {/* Key Findings */}
+      {keyFindings.length > 0 && (
+        <div className="space-y-3">
+          <h4 className="text-xl font-bold text-gray-900">Key Findings</h4>
+          <ul className="space-y-2 list-disc list-inside">
+            {keyFindings.map((finding, i) => (
+              <li key={i} className="text-base text-gray-900 leading-relaxed">
+                {renderTextWithCitations(finding)}
+              </li>
+            ))}
+          </ul>
+        </div>
+      )}
+
+      {/* Sources */}
+      {sources && (
+        <div className="pt-4 border-t-2 border-gray-200">
+          <p className="text-base text-gray-900">
+            <span className="font-bold">Sources:</span>{" "}
+            <span className="font-mono text-sm text-blue-700">{sources}</span>
+          </p>
+        </div>
+      )}
+
+      {/* Loading indicator */}
+      {isStreaming && (
+        <div className="flex items-center gap-2 text-gray-600">
+          <Loader2 className="w-4 h-4 animate-spin" />
+          <span className="text-sm">Generating answer...</span>
+        </div>
+      )}
+
+      {/* Disclaimer */}
+      {!isStreaming && text && (
+        <div className="pt-4 border-t-2 border-gray-200">
+          <p className="text-sm text-gray-600 italic flex items-center gap-2">
+            <span>⚠️</span>
+            <span>AI-generated summary. Verify with evidence below.</span>
+          </p>
+        </div>
+      )}
     </div>
   )
 }
+
+export default AnswerCard

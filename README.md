@@ -34,7 +34,7 @@ Evidence-driven decision support for Moon/Mars missions. Built with Next.js (App
 
 - Next.js 14, React 18, TypeScript, Tailwind
 - Supabase: read-only anon + RPC (match_documents, match_passages)
-- Groq: llama-3.1-70b-versatile (OpenAI-compatible API)
+- Groq: llama-3.3-70b-versatile (OpenAI-compatible API)
 - Accessibility: WCAG 2.2 AA; focus traps; reduced-motion safe
 
 ## Folder map
