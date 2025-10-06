@@ -3,7 +3,7 @@
 import { useState, useEffect, useRef } from "react"
 import { PageLayout } from "@/components/layout/PageLayout"
 import * as d3 from "d3"
-import { Loader2, AlertCircle } from "lucide-react"
+import { Loader2, AlertCircle, ZoomIn, ZoomOut, Maximize2 } from "lucide-react"
 
 interface Node extends d3.SimulationNodeDatum {
   id: string
@@ -28,6 +28,9 @@ interface GraphData {
 
 export default function GraphPage() {
   const svgRef = useRef<SVGSVGElement>(null)
+  const containerRef = useRef<HTMLDivElement>(null)
+  const zoomBehaviorRef = useRef<d3.ZoomBehavior<SVGSVGElement, unknown> | null>(null)
+  const [zoomTransform, setZoomTransform] = useState<d3.ZoomTransform>(d3.zoomIdentity)
   const [graphData, setGraphData] = useState<GraphData | null>(null)
   const [loading, setLoading] = useState(true)
   const [error, setError] = useState<string | null>(null)
@@ -35,7 +38,6 @@ export default function GraphPage() {
   const [selectedRelation, setSelectedRelation] = useState<string>("all")
   const [limit, setLimit] = useState(200)
 
-  // Fetch graph data
   useEffect(() => {
     const fetchGraph = async () => {
       setLoading(true)
@@ -73,32 +75,37 @@ export default function GraphPage() {
     fetchGraph()
   }, [selectedTopic, limit])
 
-  // Render D3 visualization
   useEffect(() => {
-    if (!graphData || !svgRef.current) return
+    if (!graphData || !svgRef.current || !containerRef.current) return
 
     const svg = d3.select(svgRef.current)
-    const width = 1200
-    const height = 800
+    const container = containerRef.current
 
-    svg.selectAll("*").remove() // Clear previous
-    svg.attr("width", width).attr("height", height)
+    const margin = 40
+    const width = container.clientWidth - margin * 2
+    const height = container.clientHeight - margin * 2
 
-    // Filter edges by relation type
+    svg.selectAll("*").remove()
+
+    svg
+      .attr("width", "100%")
+      .attr("height", "100%")
+      .attr("viewBox", `0 0 ${width + margin * 2} ${height + margin * 2}`)
+      .attr("preserveAspectRatio", "xMidYMid meet")
+
+    const g = svg.append("g").attr("transform", `translate(${margin}, ${margin})`)
+
     const edges =
       selectedRelation === "all" ? graphData.edges : graphData.edges.filter((e) => e.relation === selectedRelation)
 
-    // Create node map
     const nodeMap = new Map(graphData.nodes.map((n) => [n.id, n]))
 
-    // Filter edges to only include those with both nodes present
     const validEdges = edges.filter((e) => {
       const sourceId = typeof e.source === "string" ? e.source : e.source.id
       const targetId = typeof e.target === "string" ? e.target : e.target.id
       return nodeMap.has(sourceId) && nodeMap.has(targetId)
     })
 
-    // Force simulation
     const simulation = d3
       .forceSimulation(graphData.nodes)
       .force(
@@ -110,10 +117,9 @@ export default function GraphPage() {
       )
       .force("charge", d3.forceManyBody().strength(-300))
       .force("center", d3.forceCenter(width / 2, height / 2))
-      .force("collision", d3.forceCollide().radius(20))
+      .force("collision", d3.forceCollide().radius(25))
 
-    // Draw edges
-    const link = svg
+    const link = g
       .append("g")
       .selectAll("line")
       .data(validEdges)
@@ -122,8 +128,7 @@ export default function GraphPage() {
       .attr("stroke-width", (d) => (d.confidence || 0.5) * 3)
       .attr("opacity", 0.6)
 
-    // Draw nodes
-    const node = svg
+    const node = g
       .append("g")
       .selectAll("circle")
       .data(graphData.nodes)
@@ -144,8 +149,7 @@ export default function GraphPage() {
       .style("cursor", "grab")
       .call(d3.drag<SVGCircleElement, Node>().on("start", dragstarted).on("drag", dragged).on("end", dragended))
 
-    // Add labels
-    const label = svg
+    const label = g
       .append("g")
       .selectAll("text")
       .data(graphData.nodes)
@@ -157,7 +161,6 @@ export default function GraphPage() {
       .attr("dy", 4)
       .style("pointer-events", "none")
 
-    // Update positions on tick
     simulation.on("tick", () => {
       link
         .attr("x1", (d: any) => d.source.x)
@@ -174,6 +177,7 @@ export default function GraphPage() {
       if (!event.active) simulation.alphaTarget(0.3).restart()
       event.subject.fx = event.subject.x
       event.subject.fy = event.subject.y
+      d3.select(event.sourceEvent.target as Element).style("cursor", "grabbing")
     }
 
     function dragged(event: d3.D3DragEvent<SVGCircleElement, Node, Node>) {
@@ -185,13 +189,45 @@ export default function GraphPage() {
       if (!event.active) simulation.alphaTarget(0)
       event.subject.fx = null
       event.subject.fy = null
+      d3.select(event.sourceEvent.target as Element).style("cursor", "grab")
     }
 
-    // Cleanup
+    const zoom = d3
+      .zoom<SVGSVGElement, unknown>()
+      .scaleExtent([0.1, 4])
+      .on("zoom", (event) => {
+        g.attr(
+          "transform",
+          `translate(${margin + event.transform.x}, ${margin + event.transform.y}) scale(${event.transform.k})`,
+        )
+        setZoomTransform(event.transform)
+      })
+
+    svg.call(zoom)
+    zoomBehaviorRef.current = zoom
+
     return () => {
       simulation.stop()
     }
   }, [graphData, selectedRelation])
+
+  const handleZoomIn = () => {
+    if (!svgRef.current || !zoomBehaviorRef.current) return
+    const svg = d3.select(svgRef.current)
+    svg.transition().duration(300).call(zoomBehaviorRef.current.scaleBy, 1.3)
+  }
+
+  const handleZoomOut = () => {
+    if (!svgRef.current || !zoomBehaviorRef.current) return
+    const svg = d3.select(svgRef.current)
+    svg.transition().duration(300).call(zoomBehaviorRef.current.scaleBy, 0.7)
+  }
+
+  const handleResetZoom = () => {
+    if (!svgRef.current || !zoomBehaviorRef.current) return
+    const svg = d3.select(svgRef.current)
+    svg.transition().duration(500).call(zoomBehaviorRef.current.transform, d3.zoomIdentity)
+  }
 
   if (loading) {
     return (
@@ -210,7 +246,6 @@ export default function GraphPage() {
       subtitle={graphData ? `${graphData.nodes.length} nodes • ${graphData.edges.length} relations` : ""}
       breadcrumbs={[{ label: "Home", href: "/" }, { label: "Map Evidence" }]}
     >
-      {/* Filters */}
       <div className="bg-white rounded-xl p-6 shadow-lg mb-8 flex flex-wrap gap-4">
         <div className="flex-1 min-w-[200px]">
           <label className="block text-sm font-semibold text-gray-700 mb-2">Topic</label>
@@ -255,7 +290,6 @@ export default function GraphPage() {
         </div>
       </div>
 
-      {/* Error state */}
       {error && (
         <div className="bg-red-50 border-2 border-red-200 rounded-xl p-8 mb-8">
           <div className="flex items-start gap-3">
@@ -268,14 +302,47 @@ export default function GraphPage() {
         </div>
       )}
 
-      {/* Graph Canvas */}
       {!error && graphData && graphData.nodes.length > 0 && (
         <>
-          <div className="bg-white rounded-xl shadow-lg p-4 overflow-auto mb-8">
-            <svg ref={svgRef} className="mx-auto" />
+          <div
+            ref={containerRef}
+            className="relative bg-white rounded-xl shadow-lg mb-8 flex items-center justify-center overflow-hidden"
+            style={{ height: "calc(100vh - 200px)", minHeight: "600px" }}
+          >
+            <svg ref={svgRef} className="w-full h-full" />
+
+            <div className="absolute top-4 right-4 flex flex-col gap-2">
+              <button
+                onClick={handleZoomIn}
+                className="p-2 bg-white rounded-lg shadow-md hover:bg-gray-50 transition-colors border border-gray-200"
+                title="Zoom In"
+              >
+                <ZoomIn className="h-5 w-5 text-gray-700" />
+              </button>
+              <button
+                onClick={handleZoomOut}
+                className="p-2 bg-white rounded-lg shadow-md hover:bg-gray-50 transition-colors border border-gray-200"
+                title="Zoom Out"
+              >
+                <ZoomOut className="h-5 w-5 text-gray-700" />
+              </button>
+              <button
+                onClick={handleResetZoom}
+                className="p-2 bg-white rounded-lg shadow-md hover:bg-gray-50 transition-colors border border-gray-200"
+                title="Reset View"
+              >
+                <Maximize2 className="h-5 w-5 text-gray-700" />
+              </button>
+            </div>
+
+            <div className="absolute bottom-4 left-4 bg-white/90 backdrop-blur-sm rounded-lg shadow-md px-4 py-2 text-sm text-gray-600">
+              <p className="font-medium mb-1">Controls:</p>
+              <p>• Drag nodes to reposition</p>
+              <p>• Mouse wheel to zoom</p>
+              <p>• Click and drag background to pan</p>
+            </div>
           </div>
 
-          {/* Legend */}
           <div className="bg-white rounded-xl p-6 shadow-lg">
             <h3 className="text-lg font-bold text-gray-900 mb-4">Legend</h3>
             <div className="grid md:grid-cols-2 gap-4">
@@ -322,7 +389,6 @@ export default function GraphPage() {
         </>
       )}
 
-      {/* Empty state */}
       {!error && graphData && graphData.nodes.length === 0 && (
         <div className="bg-gray-50 border-2 border-gray-200 rounded-xl p-12 text-center">
           <p className="text-lg text-gray-600 mb-4">No graph data available</p>

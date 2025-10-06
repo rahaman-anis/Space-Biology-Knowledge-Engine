@@ -4,6 +4,7 @@ import { useEffect, useState } from "react"
 import { useRouter, useSearchParams } from "next/navigation"
 import { SearchInput } from "@/components/aria/SearchInput"
 import { ResultsTable } from "@/components/aria/ResultsTable"
+import { Breadcrumbs } from "@/components/layout/Breadcrumbs"
 
 type Mode = "passages" | "documents"
 type Result = any
@@ -61,9 +62,11 @@ export default function AriaPage() {
   return (
     <div className="min-h-screen bg-background">
       <header className="max-w-7xl mx-auto px-4 md:px-6 pt-10 pb-6">
+        <Breadcrumbs crumbs={[{ label: "Home", href: "/" }, { label: "Search ARIA" }]} />
+
         <h1 className="font-heading text-3xl md:text-4xl text-foreground">Ask ARIA</h1>
         <p className="text-muted-foreground mt-2">
-          Agentic Research Intelligence Assistant — section-aware search with citations.
+          Artemis Research Intelligence Assistant — section-aware search with citations.
         </p>
       </header>
 

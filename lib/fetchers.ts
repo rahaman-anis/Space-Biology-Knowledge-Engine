@@ -105,7 +105,7 @@ export async function fetchClaims(filters: SearchFilters = {}): Promise<Result<C
     return createEmptyResult([])
   }
 
-  const { limit = 50, offset = 0, topic, subtopic, status, confidence, query } = filters
+  const { limit = 50, offset = 0, status, confidence, query } = filters
 
   return wrapQuery(async () => {
     let queryBuilder = supabase
@@ -114,12 +114,6 @@ export async function fetchClaims(filters: SearchFilters = {}): Promise<Result<C
       .range(offset, offset + limit - 1)
 
     // Apply filters
-    if (topic) {
-      queryBuilder = queryBuilder.eq(COLUMNS.CLAIMS.TOPIC, topic)
-    }
-    if (subtopic) {
-      queryBuilder = queryBuilder.eq(COLUMNS.CLAIMS.SUBTOPIC, subtopic)
-    }
     if (status) {
       queryBuilder = queryBuilder.eq(COLUMNS.CLAIMS.STATUS, status)
     }
@@ -159,7 +153,40 @@ export async function fetchClaimById(id: string): Promise<Result<Claim | null>> 
  * Fetch claims by topic
  */
 export async function fetchClaimsByTopic(topic: string, limit = 20): Promise<Result<Claim[]>> {
-  return fetchClaims({ topic, limit })
+  const supabase = getSupabaseClient()
+  if (!supabase) {
+    return createEmptyResult([])
+  }
+
+  return wrapQuery(async () => {
+    // First, get pmcids for documents with this topic
+    const docsResult = await supabase
+      .from(TABLES.DOCS)
+      .select(COLUMNS.DOCS.PMC)
+      .eq(COLUMNS.DOCS.TOPIC, topic)
+      .limit(100)
+
+    if (docsResult.error || !docsResult.data || docsResult.data.length === 0) {
+      return { data: [], error: docsResult.error }
+    }
+
+    // Extract pmcids
+    const pmcids = docsResult.data.map((doc: any) => doc[COLUMNS.DOCS.PMC]).filter(Boolean)
+
+    if (pmcids.length === 0) {
+      return { data: [], error: null }
+    }
+
+    // Then, get claims for those pmcids
+    const claimsResult = await supabase
+      .from(TABLES.CLAIMS)
+      .select(buildSelectString("CLAIMS"))
+      .in(COLUMNS.CLAIMS.PMC, pmcids)
+      .order(COLUMNS.CLAIMS.CONFIDENCE, { ascending: false })
+      .limit(limit)
+
+    return { data: claimsResult.data as Claim[], error: claimsResult.error }
+  }, [])
 }
 
 /**

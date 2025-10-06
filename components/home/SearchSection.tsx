@@ -45,7 +45,7 @@ export default function SearchSection() {
               ?
             </button>
             <div className="absolute left-1/2 -translate-x-1/2 bottom-full mb-2 hidden group-hover:block w-72 bg-gray-900 text-white text-sm rounded-lg p-4 shadow-xl z-10">
-              <strong>ARIA</strong>: Agentic Research Intelligence Assistant
+              <strong>ARIA</strong>: Artemis Research Intelligence Assistant
               <br />
               AI-powered search across 572 NASA studies with section-aware retrieval
             </div>
