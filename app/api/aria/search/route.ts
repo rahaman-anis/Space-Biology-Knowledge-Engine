@@ -123,7 +123,7 @@ export async function POST(req: Request) {
     async function fallbackPassages() {
       const { data, error } = await supabase
         .from("passage_embeddings")
-        .select("pmcid,section,text,embedding")
+        .select("pmcid, section, snippet as text, embedding")
         .limit(3000);
       if (error || !Array.isArray(data)) return [];
       const scored = data
