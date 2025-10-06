@@ -16,10 +16,27 @@ export async function GET(request: NextRequest, { params }: { params: { topic: s
   const supabase = createClient(url, key)
 
   try {
+    // Claims table doesn't have a topic column - need to join via documents
+    const { data: docs, error: docsError } = await supabase
+      .from("documents")
+      .select("pmcid")
+      .ilike("topic", `%${topic}%`)
+      .limit(100)
+
+    if (docsError) {
+      return NextResponse.json({ error: docsError.message }, { status: 500 })
+    }
+
+    const pmcids = docs?.map((d) => d.pmcid).filter(Boolean) || []
+
+    if (pmcids.length === 0) {
+      return NextResponse.json({ claims: [] })
+    }
+
     const { data, error } = await supabase
       .from("claims")
       .select("pmcid,claim_text,subject,predicate,object,confidence,section")
-      .ilike("topic", `%${topic}%`)
+      .in("pmcid", pmcids)
       .order("confidence", { ascending: false })
       .limit(limit)
 

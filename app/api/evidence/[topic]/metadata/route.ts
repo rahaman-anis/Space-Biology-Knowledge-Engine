@@ -14,33 +14,29 @@ export async function GET(request: NextRequest, { params }: { params: { topic: s
   const supabase = createClient(url, key)
 
   try {
-    // Try to query topics_v view first
-    const { data: topicData, error: topicError } = await supabase
-      .from("topics_v")
-      .select("topic,study_count,osdr_linked,mission_criticality,r4c_score")
-      .ilike("topic", topic)
-      .single()
-
-    if (!topicError && topicData) {
-      return NextResponse.json(topicData)
-    }
-
-    // Fallback: calculate metrics from documents table
+    // Calculate metrics directly from documents table
     const { data: docs, error: docsError } = await supabase
       .from("documents")
-      .select("pmcid")
+      .select("pmcid,year")
       .ilike("topic", `%${topic}%`)
 
     if (docsError) {
+      console.error("[metadata] Documents query error:", docsError)
       return NextResponse.json({ error: docsError.message }, { status: 500 })
     }
 
+    // Calculate basic metrics
+    const studyCount = docs?.length || 0
+    const years = docs?.map((d) => d.year).filter(Boolean) || []
+    const avgYear = years.length > 0 ? Math.round(years.reduce((a, b) => a + b, 0) / years.length) : null
+
     return NextResponse.json({
       topic,
-      study_count: docs?.length || 0,
+      study_count: studyCount,
       osdr_linked: 0,
       mission_criticality: 0.5,
       r4c_score: 0.5,
+      avg_year: avgYear,
     })
   } catch (err) {
     console.error("[metadata] Exception:", err)

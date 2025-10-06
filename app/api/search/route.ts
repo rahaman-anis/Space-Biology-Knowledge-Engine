@@ -34,11 +34,11 @@ export async function POST(req: Request) {
 
     const q = (body.q ?? "").toString().trim()
     if (!q) {
-      return NextResponse.json({ ok: true, results: [] }, { status: 200 })
+      return NextResponse.json({ ok: true, results: [], source: "API" }, { status: 200 })
     }
 
     const mode: "passages" | "documents" = body.mode ?? "passages"
-    const topK = Math.max(1, Math.min(20, Number(body.topK ?? 8)))
+    const topK = Math.max(1, Math.min(20, Number(body.topK ?? 10)))
     const vec = hash256(q, VEC_DIM)
 
     if (mode === "documents") {
@@ -46,15 +46,18 @@ export async function POST(req: Request) {
         query_embedding: vec,
         match_count: topK,
       })
-      if (error) return NextResponse.json({ ok: false, error: error.message }, { status: 200 })
+      if (error) return NextResponse.json({ ok: false, error: error.message, source: "API" }, { status: 200 })
+
       const results = (data ?? []).map((r: any) => ({
         pmcid: r.pmcid,
-        title: r.title ?? null,
+        title: r.title ?? "Untitled",
+        abstract: r.abstract ?? "",
         year: r.year ?? null,
         score: r.score,
+        confidence: r.score >= 0.8 ? "High" : r.score >= 0.6 ? "Medium" : "Low",
         type: "document" as const,
       }))
-      return NextResponse.json({ ok: true, results }, { status: 200 })
+      return NextResponse.json({ ok: true, results, source: "API" }, { status: 200 })
     }
 
     // passages (default)
@@ -62,17 +65,21 @@ export async function POST(req: Request) {
       query_embedding: vec,
       match_count: topK,
     })
-    if (error) return NextResponse.json({ ok: false, error: error.message }, { status: 200 })
+    if (error) return NextResponse.json({ ok: false, error: error.message, source: "API" }, { status: 200 })
 
     const results = (data ?? []).map((r: any) => ({
       pmcid: r.pmcid,
+      title: r.title ?? "Untitled",
       section: r.section ?? "All",
       snippet: r.snippet ?? "",
+      abstract: r.abstract ?? "",
+      year: r.year ?? null,
       score: r.score,
+      confidence: r.score >= 0.8 ? "High" : r.score >= 0.6 ? "Medium" : "Low",
       type: "passage" as const,
     }))
-    return NextResponse.json({ ok: true, results }, { status: 200 })
+    return NextResponse.json({ ok: true, results, source: "API" }, { status: 200 })
   } catch (e: any) {
-    return NextResponse.json({ ok: false, error: String(e?.message || e) }, { status: 200 })
+    return NextResponse.json({ ok: false, error: String(e?.message || e), source: "API" }, { status: 200 })
   }
 }

@@ -16,11 +16,27 @@ export async function GET(request: NextRequest, { params }: { params: { topic: s
   const supabase = createClient(url, key)
 
   try {
-    // Get claims with document info
+    // Claims table doesn't have a topic column - need to join via documents
+    const { data: docs, error: docsError } = await supabase
+      .from("documents")
+      .select("pmcid")
+      .ilike("topic", `%${topic}%`)
+      .limit(100)
+
+    if (docsError) {
+      return NextResponse.json({ error: docsError.message }, { status: 500 })
+    }
+
+    const pmcids = docs?.map((d) => d.pmcid).filter(Boolean) || []
+
+    if (pmcids.length === 0) {
+      return NextResponse.json({ studies: [] })
+    }
+
     const { data: claims, error: claimsError } = await supabase
       .from("claims")
       .select("pmcid,section,claim_text,confidence")
-      .ilike("topic", `%${topic}%`)
+      .in("pmcid", pmcids)
       .order("confidence", { ascending: false })
       .limit(limit)
 
@@ -29,22 +45,22 @@ export async function GET(request: NextRequest, { params }: { params: { topic: s
     }
 
     // Get document details for these PMCIDs
-    const pmcids = claims?.map((c) => c.pmcid) || []
-    if (pmcids.length === 0) {
+    const claimPmcids = claims?.map((c) => c.pmcid) || []
+    if (claimPmcids.length === 0) {
       return NextResponse.json({ studies: [] })
     }
 
-    const { data: docs, error: docsError } = await supabase
+    const { data: docDetails, error: docDetailsError } = await supabase
       .from("documents")
       .select("pmcid,title,year")
-      .in("pmcid", pmcids)
+      .in("pmcid", claimPmcids)
 
-    if (docsError) {
-      return NextResponse.json({ error: docsError.message }, { status: 500 })
+    if (docDetailsError) {
+      return NextResponse.json({ error: docDetailsError.message }, { status: 500 })
     }
 
     // Merge claims and documents
-    const docsMap = new Map(docs?.map((d) => [d.pmcid, d]))
+    const docsMap = new Map(docDetails?.map((d) => [d.pmcid, d]))
     const studies = claims?.map((c) => {
       const doc = docsMap.get(c.pmcid)
       return {
