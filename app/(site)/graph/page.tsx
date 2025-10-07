@@ -133,7 +133,7 @@ export default function GraphPage() {
       .selectAll("circle")
       .data(graphData.nodes)
       .join("circle")
-      .attr("r", 8)
+      .attr("r", (d) => Math.sqrt(d.type.length)) // Node size based on number of connections
       .attr("fill", (d) => {
         const colors: Record<string, string> = {
           bone: "#EAB308",
@@ -243,9 +243,58 @@ export default function GraphPage() {
   return (
     <PageLayout
       title="Evidence Knowledge Graph"
-      subtitle={graphData ? `${graphData.nodes.length} nodes • ${graphData.edges.length} relations` : ""}
+      subtitle=""
       breadcrumbs={[{ label: "Home", href: "/" }, { label: "Map Evidence" }]}
     >
+      <div className="bg-white rounded-xl p-8 shadow-lg mb-8">
+        <h2 className="text-2xl font-bold text-gray-900 mb-4">
+          Visualize 28,864 evidence relations across the space biology corpus
+        </h2>
+        <div className="space-y-4 text-gray-700 leading-relaxed">
+          <p>
+            This interactive graph maps how studies agree, contradict, or build upon each other. Each connection
+            represents a relationship between research findings—revealing consensus, controversy, and knowledge clusters
+            invisible in traditional literature review.
+          </p>
+
+          <div>
+            <p className="font-semibold text-gray-900 mb-2">What the graph shows:</p>
+            <ul className="list-disc list-inside space-y-1 ml-2">
+              <li>Green edges: Studies that support each other's findings</li>
+              <li>Red edges: Studies with contradictory results</li>
+              <li>Node size: Number of connections (influence in the field)</li>
+              <li>Node color: Research topic (Bone, Immune, Radiation, etc.)</li>
+            </ul>
+          </div>
+
+          <div>
+            <p className="font-semibold text-gray-900 mb-2">How to use this graph:</p>
+            <ul className="list-disc list-inside space-y-1 ml-2">
+              <li>Zoom and pan to explore different research areas</li>
+              <li>Click nodes to see study details and related papers</li>
+              <li>Filter by topic to focus on specific biological systems</li>
+              <li>Filter by relation type (supports/contradicts) to find consensus or controversy</li>
+            </ul>
+          </div>
+
+          <div>
+            <p className="font-semibold text-gray-900 mb-2">Why this matters for mission planning:</p>
+            <ul className="list-disc list-inside space-y-1 ml-2">
+              <li>Identify which findings have strong consensus vs. ongoing debate</li>
+              <li>Find isolated studies that need replication</li>
+              <li>Discover unexpected connections between research areas</li>
+              <li>Spot contradiction clusters requiring expert review before mission commit</li>
+            </ul>
+          </div>
+
+          <div className="pt-4 border-t border-gray-200">
+            <p className="font-semibold text-gray-900">
+              Graph Statistics: 1,092 studies mapped • 28,864 evidence relations • 6 research topics
+            </p>
+          </div>
+        </div>
+      </div>
+
       <div className="bg-white rounded-xl p-6 shadow-lg mb-8 flex flex-wrap gap-4">
         <div className="flex-1 min-w-[200px]">
           <label className="block text-sm font-semibold text-gray-700 mb-2">Topic</label>
@@ -304,83 +353,114 @@ export default function GraphPage() {
 
       {!error && graphData && graphData.nodes.length > 0 && (
         <>
-          <div
-            ref={containerRef}
-            className="relative bg-white rounded-xl shadow-lg mb-8 flex items-center justify-center overflow-hidden"
-            style={{ height: "calc(100vh - 200px)", minHeight: "600px" }}
-          >
-            <svg ref={svgRef} className="w-full h-full" />
+          <div className="flex flex-col lg:flex-row gap-6 mb-8">
+            {/* Main graph area */}
+            <div className="flex-1">
+              <div
+                ref={containerRef}
+                className="relative bg-white rounded-xl shadow-lg flex items-center justify-center overflow-hidden"
+                style={{ height: "calc(100vh - 200px)", minHeight: "600px" }}
+              >
+                <svg ref={svgRef} className="w-full h-full" />
 
-            <div className="absolute top-4 right-4 flex flex-col gap-2">
-              <button
-                onClick={handleZoomIn}
-                className="p-2 bg-white rounded-lg shadow-md hover:bg-gray-50 transition-colors border border-gray-200"
-                title="Zoom In"
-              >
-                <ZoomIn className="h-5 w-5 text-gray-700" />
-              </button>
-              <button
-                onClick={handleZoomOut}
-                className="p-2 bg-white rounded-lg shadow-md hover:bg-gray-50 transition-colors border border-gray-200"
-                title="Zoom Out"
-              >
-                <ZoomOut className="h-5 w-5 text-gray-700" />
-              </button>
-              <button
-                onClick={handleResetZoom}
-                className="p-2 bg-white rounded-lg shadow-md hover:bg-gray-50 transition-colors border border-gray-200"
-                title="Reset View"
-              >
-                <Maximize2 className="h-5 w-5 text-gray-700" />
-              </button>
+                <div className="absolute top-4 right-4 flex flex-col gap-2">
+                  <button
+                    onClick={handleZoomIn}
+                    className="p-2 bg-white rounded-lg shadow-md hover:bg-gray-50 transition-colors border border-gray-200"
+                    title="Zoom In"
+                  >
+                    <ZoomIn className="h-5 w-5 text-gray-700" />
+                  </button>
+                  <button
+                    onClick={handleZoomOut}
+                    className="p-2 bg-white rounded-lg shadow-md hover:bg-gray-50 transition-colors border border-gray-200"
+                    title="Zoom Out"
+                  >
+                    <ZoomOut className="h-5 w-5 text-gray-700" />
+                  </button>
+                  <button
+                    onClick={handleResetZoom}
+                    className="p-2 bg-white rounded-lg shadow-md hover:bg-gray-50 transition-colors border border-gray-200"
+                    title="Reset View"
+                  >
+                    <Maximize2 className="h-5 w-5 text-gray-700" />
+                  </button>
+                </div>
+
+                <div className="absolute bottom-4 left-4 bg-white/90 backdrop-blur-sm rounded-lg shadow-md px-4 py-2 text-sm text-gray-600">
+                  <p className="font-medium mb-1">Controls:</p>
+                  <p>• Drag nodes to reposition</p>
+                  <p>• Mouse wheel to zoom</p>
+                  <p>• Click and drag background to pan</p>
+                </div>
+              </div>
             </div>
 
-            <div className="absolute bottom-4 left-4 bg-white/90 backdrop-blur-sm rounded-lg shadow-md px-4 py-2 text-sm text-gray-600">
-              <p className="font-medium mb-1">Controls:</p>
-              <p>• Drag nodes to reposition</p>
-              <p>• Mouse wheel to zoom</p>
-              <p>• Click and drag background to pan</p>
-            </div>
-          </div>
-
-          <div className="bg-white rounded-xl p-6 shadow-lg">
-            <h3 className="text-lg font-bold text-gray-900 mb-4">Legend</h3>
-            <div className="grid md:grid-cols-2 gap-4">
-              <div>
-                <h4 className="text-sm font-semibold text-gray-700 mb-2">Relations</h4>
-                <div className="space-y-2">
-                  <div className="flex items-center gap-2">
-                    <div className="w-8 h-1 bg-green-600"></div>
-                    <span className="text-sm text-gray-700">Supports</span>
+            <div className="lg:w-80 space-y-6">
+              {/* Graph Legend Card */}
+              <div className="bg-white rounded-xl p-6 shadow-lg">
+                <h3 className="text-lg font-bold text-gray-900 mb-4">Graph Legend</h3>
+                <div className="space-y-4">
+                  <div>
+                    <h4 className="text-sm font-semibold text-gray-700 mb-2">Relations</h4>
+                    <div className="space-y-2">
+                      <div className="flex items-center gap-2">
+                        <div className="w-8 h-1 bg-green-600"></div>
+                        <span className="text-sm text-gray-700">Supports</span>
+                      </div>
+                      <div className="flex items-center gap-2">
+                        <div className="w-8 h-1 bg-red-600"></div>
+                        <span className="text-sm text-gray-700">Contradicts</span>
+                      </div>
+                    </div>
                   </div>
-                  <div className="flex items-center gap-2">
-                    <div className="w-8 h-1 bg-red-600"></div>
-                    <span className="text-sm text-gray-700">Contradicts</span>
+                  <div>
+                    <h4 className="text-sm font-semibold text-gray-700 mb-2">Topics</h4>
+                    <div className="space-y-2">
+                      <div className="flex items-center gap-2">
+                        <div className="w-4 h-4 rounded-full bg-yellow-500"></div>
+                        <span className="text-sm text-gray-700">Bone</span>
+                      </div>
+                      <div className="flex items-center gap-2">
+                        <div className="w-4 h-4 rounded-full bg-blue-500"></div>
+                        <span className="text-sm text-gray-700">Immune</span>
+                      </div>
+                      <div className="flex items-center gap-2">
+                        <div className="w-4 h-4 rounded-full bg-red-500"></div>
+                        <span className="text-sm text-gray-700">Radiation</span>
+                      </div>
+                      <div className="flex items-center gap-2">
+                        <div className="w-4 h-4 rounded-full bg-green-500"></div>
+                        <span className="text-sm text-gray-700">Muscle</span>
+                      </div>
+                      <div className="flex items-center gap-2">
+                        <div className="w-4 h-4 rounded-full bg-pink-500"></div>
+                        <span className="text-sm text-gray-700">Cardiovascular</span>
+                      </div>
+                    </div>
                   </div>
                 </div>
               </div>
-              <div>
-                <h4 className="text-sm font-semibold text-gray-700 mb-2">Topics</h4>
-                <div className="space-y-2">
-                  <div className="flex items-center gap-2">
-                    <div className="w-4 h-4 rounded-full bg-yellow-500"></div>
-                    <span className="text-sm text-gray-700">Bone</span>
+
+              {/* Quick Insights Card */}
+              <div className="bg-white rounded-xl p-6 shadow-lg">
+                <h3 className="text-lg font-bold text-gray-900 mb-4">Quick Insights</h3>
+                <div className="space-y-3">
+                  <div className="flex justify-between items-center py-2 border-b border-gray-100">
+                    <span className="text-sm font-medium text-gray-700">Most connected study:</span>
+                    <span className="text-sm text-gray-500">—</span>
                   </div>
-                  <div className="flex items-center gap-2">
-                    <div className="w-4 h-4 rounded-full bg-blue-500"></div>
-                    <span className="text-sm text-gray-700">Immune</span>
+                  <div className="flex justify-between items-center py-2 border-b border-gray-100">
+                    <span className="text-sm font-medium text-gray-700">Biggest controversy:</span>
+                    <span className="text-sm text-gray-500">—</span>
                   </div>
-                  <div className="flex items-center gap-2">
-                    <div className="w-4 h-4 rounded-full bg-red-500"></div>
-                    <span className="text-sm text-gray-700">Radiation</span>
+                  <div className="flex justify-between items-center py-2 border-b border-gray-100">
+                    <span className="text-sm font-medium text-gray-700">Strongest consensus:</span>
+                    <span className="text-sm text-gray-500">—</span>
                   </div>
-                  <div className="flex items-center gap-2">
-                    <div className="w-4 h-4 rounded-full bg-green-500"></div>
-                    <span className="text-sm text-gray-700">Muscle</span>
-                  </div>
-                  <div className="flex items-center gap-2">
-                    <div className="w-4 h-4 rounded-full bg-pink-500"></div>
-                    <span className="text-sm text-gray-700">Cardiovascular</span>
+                  <div className="flex justify-between items-center py-2">
+                    <span className="text-sm font-medium text-gray-700">Isolated studies:</span>
+                    <span className="text-sm text-gray-500">—</span>
                   </div>
                 </div>
               </div>

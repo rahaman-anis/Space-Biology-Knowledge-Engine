@@ -34,9 +34,9 @@ export function EvidenceAccordion({ results }: Props) {
   }
 
   const getDisplayTitle = (r: EvidenceRow): string => {
-    // If title exists and is not "Untitled", use it
-    if (r.title && r.title !== "Untitled" && r.title.trim().length > 0) {
-      return r.title
+    // Prefer server title if it exists and is not generic
+    if (r.title && r.title.trim() && r.title !== "Untitled" && !r.title.startsWith("Untitled (")) {
+      return r.title.trim()
     }
 
     // Fallback 1: Use first non-empty snippet from sections (truncate to 80 chars)
@@ -48,7 +48,7 @@ export function EvidenceAccordion({ results }: Props) {
     }
 
     // Fallback 2: Generic title with PMCID
-    return `Study (${r.pmcid})`
+    return `Study ${r.pmcid}`
   }
 
   return (
@@ -61,7 +61,6 @@ export function EvidenceAccordion({ results }: Props) {
       <Accordion.Root type="single" collapsible defaultValue="item-0" className="space-y-3">
         {results.map((r, i) => {
           const displayTitle = getDisplayTitle(r)
-          const shortTitle = displayTitle.length > 80 ? displayTitle.slice(0, 80) + "..." : displayTitle
           const sections = r.sections || {}
           const hasSections = Object.keys(sections).length > 0
 
@@ -77,7 +76,10 @@ export function EvidenceAccordion({ results }: Props) {
               <Accordion.Header>
                 <Accordion.Trigger className="w-full p-5 text-left focus:outline-none focus:ring-2 focus:ring-blue-500 focus:ring-inset group">
                   <div className="flex items-start justify-between gap-4 mb-3">
-                    <h3 className="text-[20px] font-bold text-gray-900 flex-1">{shortTitle}</h3>
+                    <h3 className="text-[20px] font-bold text-gray-900 flex-1">
+                      {displayTitle}
+                      {r.year ? ` (${r.year})` : null}
+                    </h3>
                     <Link
                       href={pmcUrl(r.pmcid)}
                       target="_blank"

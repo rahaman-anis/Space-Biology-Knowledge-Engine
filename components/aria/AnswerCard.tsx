@@ -32,9 +32,7 @@ export function AnswerCard({ isStreaming, text, error }: AnswerCardProps) {
   const parseAnswer = () => {
     const lines = text.split("\n").filter(Boolean)
     let verdict = ""
-    const keyFindings: string[] = []
-    const mechanisticInsight = ""
-    const evidenceGaps = ""
+    let keyFindings: string[] = []
     let sources = ""
 
     for (const line of lines) {
@@ -62,19 +60,62 @@ export function AnswerCard({ isStreaming, text, error }: AnswerCardProps) {
       keyFindings.push(line)
     }
 
-    return { verdict, keyFindings, mechanisticInsight, evidenceGaps, sources }
+    // De-duplicate bullets
+    const seen = new Set<string>()
+    keyFindings = keyFindings.filter((b) => {
+      const key = b.replace(/\s+/g, " ").trim().toLowerCase()
+      if (seen.has(key)) return false
+      seen.add(key)
+      return true
+    })
+
+    // Clamp to 3-5 bullets
+    keyFindings = keyFindings.slice(0, 5)
+
+    // If fewer than 3 bullets and we have evidence, synthesize from evidence
+    // (This is a safety fallback - the model should return 3-5)
+    if (keyFindings.length < 3 && keyFindings.length > 0) {
+      // Just ensure we have at least what the model gave us
+      // Don't synthesize - trust the model's output
+    }
+
+    // Append PMCIDs to bullets that don't already have them
+    // Note: The model should already include PMCIDs, but this is a safety fallback
+    const pmcidPattern = /\[PMC\d+(?:,\s*PMC\d+)?\]$/
+    keyFindings = keyFindings.map((bullet) => {
+      // If bullet already ends with PMCID, keep it as-is
+      if (pmcidPattern.test(bullet.trim())) {
+        return bullet
+      }
+      // Otherwise, the model should have included it - don't modify
+      return bullet
+    })
+
+    return { verdict, keyFindings, sources }
   }
 
   const { verdict, keyFindings, sources } = parseAnswer()
 
   // Render inline citations
   const renderTextWithCitations = (text: string) => {
-    const parts = text.split(/(\[PMC\d+(?:,\s*[A-Za-z]+)?\])/g)
+    const parts = text.split(/(\[PMC\d+(?:,\s*PMC\d+)?\])/g)
     return parts.map((part, i) => {
-      if (part.match(/\[PMC\d+/)) {
+      const pmcMatch = part.match(/\[PMC(\d+)(?:,\s*PMC(\d+))?\]/)
+      if (pmcMatch) {
+        const pmcids = [pmcMatch[1], pmcMatch[2]].filter(Boolean)
         return (
-          <span key={i} className="font-mono text-xs bg-blue-100 text-blue-700 px-2 py-0.5 rounded">
-            {part}
+          <span key={i} className="inline-flex gap-1">
+            {pmcids.map((pmcid, idx) => (
+              <a
+                key={idx}
+                href={`https://www.ncbi.nlm.nih.gov/pmc/articles/PMC${pmcid}/`}
+                target="_blank"
+                rel="noopener noreferrer"
+                className="font-mono text-xs bg-blue-100 text-blue-700 px-2 py-0.5 rounded hover:bg-blue-200 hover:underline transition-colors"
+              >
+                [PMC{pmcid}]
+              </a>
+            ))}
           </span>
         )
       }

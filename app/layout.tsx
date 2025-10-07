@@ -18,7 +18,7 @@ const overpass = Overpass({
 export const metadata: Metadata = {
   title: "Space Biology Knowledge Engine",
   description: "Evidence-driven decision support for Moon/Mars missions",
-    generator: 'v0.app'
+  generator: "v0.app",
 }
 
 export default function RootLayout({ children }: { children: React.ReactNode }) {

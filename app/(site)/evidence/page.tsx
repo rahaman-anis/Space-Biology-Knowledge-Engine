@@ -72,6 +72,32 @@ export default function EvidencePage() {
       subtitle="Browse evidence across biological systems and research areas"
       breadcrumbs={[{ label: "Home", href: "/" }, { label: "Explore Topics" }]}
     >
+      {/* New header card with provided copy */}
+      <div className="bg-white rounded-2xl border p-6 md:p-8 space-y-3 mb-8">
+        <h1 className="text-3xl md:text-4xl font-bold text-gray-900">Explore Topics</h1>
+        <p className="text-lg text-gray-700">Browse evidence across biological systems and research areas</p>
+
+        <p className="text-base text-gray-600 leading-relaxed">
+          Discover what we know—and what we don't—about human spaceflight health risks. Each topic shows study coverage,
+          mission criticality, and evidence maturity to guide research priorities.
+        </p>
+
+        <div className="pt-2">
+          <p className="text-sm font-semibold text-gray-900 mb-2">Features:</p>
+          <ul className="space-y-1 text-sm text-gray-600">
+            <li>• Study counts from NASA space biology corpus</li>
+            <li>• Mission criticality ratings for Artemis/Mars planning</li>
+            <li>• Evidence maturity assessment (readiness for crew application)</li>
+            <li>• Direct links to topic-specific evidence and gaps</li>
+          </ul>
+        </div>
+      </div>
+
+      {/* Static stats strip */}
+      <div className="mb-6 text-sm md:text-base text-muted-foreground text-center">
+        Research Coverage Overview — 572 studies • 6 biological systems • 173 identified gaps
+      </div>
+
       <div className="grid md:grid-cols-2 lg:grid-cols-3 gap-6">
         {topics.map((topic) => {
           const maturity = getMaturityLevel(topic.r4c_score)
@@ -80,7 +106,7 @@ export default function EvidencePage() {
             <Link
               key={topic.topic}
               href={`/evidence/${encodeURIComponent(topic.topic)}`}
-              className="bg-card rounded-2xl p-6 shadow-lg border-2 border-border hover:border-primary hover:shadow-xl transition-all group"
+              className="bg-card rounded-2xl p-6 shadow-lg border-2 border-border hover:border-blue-300 hover:shadow-lg transition-all group"
             >
               {/* Header */}
               <div className="flex items-center justify-between mb-4">
@@ -139,6 +165,11 @@ export default function EvidencePage() {
                   </div>
                 </div>
               </div>
+
+              {/* CTA button */}
+              <button className="w-full mt-4 bg-blue-600 hover:bg-blue-700 text-white font-bold text-[16px] py-3 rounded-lg transition-colors">
+                Explore Evidence →
+              </button>
             </Link>
           )
         })}

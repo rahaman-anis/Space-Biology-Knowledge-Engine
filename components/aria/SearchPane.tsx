@@ -11,9 +11,9 @@ import { searchPassages } from "@/lib/aria/client"
 import type { EvidenceRow, SectionType, Confidence } from "@/lib/aria/schema"
 
 const searchExamplesDefault = [
-  "microgravity bone resorption RANKL Results",
-  "ISS T-cell dysfunction latent virus Results",
-  "unloading muscle mitochondrial dysfunction ARED Discussion",
+  "microgravity bone loss RANKL",
+  "ISS T-cell dysfunction latent virus",
+  "hindlimb unloading mitochondrial dysfunction ARED discussion",
 ]
 
 export function SearchPane() {
@@ -49,17 +49,26 @@ export function SearchPane() {
 
     console.log("[v0] SearchPane: Calling searchPassages with query:", q, "mode:", m)
 
-    const result = await searchPassages({ q: q.trim(), mode: m, topK: 8, section, confidence, sort })
+    try {
+      const result = await searchPassages({ q: q.trim(), mode: m, topK: 8, section, confidence, sort })
 
-    setLoading(false)
-    if (result.ok) {
-      console.log("[v0] SearchPane: Results received, count:", result.results.length)
-      setEvidences(result.results)
-      if (result.hint) setSearchHint(result.hint)
-      if (result.examples) setSearchExamples(result.examples)
-    } else {
-      console.log("[v0] SearchPane: Error:", result.error)
+      setLoading(false)
+      if (result.ok) {
+        console.log("[v0] SearchPane: Results received, count:", result.results?.length ?? 0)
+        // Ensure results is always an array, even if undefined/null
+        setEvidences(Array.isArray(result.results) ? result.results : [])
+        if (result.hint) setSearchHint(result.hint)
+        if (result.examples) setSearchExamples(result.examples)
+      } else {
+        console.log("[v0] SearchPane: Error:", result.error)
+        setEvidences([])
+        setSearchHint(result.error ?? "Search failed. Please try again.")
+      }
+    } catch (err) {
+      console.error("[v0] SearchPane: Unexpected error:", err)
+      setLoading(false)
       setEvidences([])
+      setSearchHint("An unexpected error occurred. Please try again.")
     }
   }
 
@@ -89,6 +98,7 @@ export function SearchPane() {
           <button
             type="button"
             onClick={() => setMode("passages")}
+            title="Returns exact text chunks from papers"
             className={`px-6 py-3 rounded-xl font-bold transition-colors text-base ${
               mode === "passages" ? "bg-blue-600 text-white" : "bg-gray-200 text-gray-700 hover:bg-gray-300"
             }`}
@@ -98,6 +108,7 @@ export function SearchPane() {
           <button
             type="button"
             onClick={() => setMode("documents")}
+            title="Scores whole papers (title/abstract/metadata)"
             className={`px-6 py-3 rounded-xl font-bold transition-colors text-base ${
               mode === "documents" ? "bg-blue-600 text-white" : "bg-gray-200 text-gray-700 hover:bg-gray-300"
             }`}
@@ -140,7 +151,7 @@ export function SearchPane() {
         <div className="space-y-3">
           <p className="text-base text-gray-700 font-semibold">Try these examples:</p>
           <div className="grid gap-3">
-            {searchExamplesDefault.map((kw, i) => (
+            {searchExamplesDefault.slice(0, 3).map((kw, i) => (
               <button
                 key={i}
                 onClick={() => handleExampleClick(kw)}
