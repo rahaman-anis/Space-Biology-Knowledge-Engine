@@ -14,51 +14,49 @@ export default function HeroSection() {
   }, [])
 
   return (
-    <section className="w-full relative">
-      <div
-        className="w-full grid grid-cols-1 lg:grid-cols-2 items-center min-h-[700px]"
-        style={{ background: "linear-gradient(135deg, #0042A6 0%, #07173F 100%)" }}
-      >
-        {/* Left column: Text content */}
-        <div className="px-6 lg:px-16 py-16 lg:py-24 relative z-10">
-          <h1 className="text-6xl lg:text-7xl font-heading font-black text-white mb-8 leading-tight">
-            Know what we know.
-            <br />
-            Find what we don't.
-            <br />
-            Plan what's next.
-          </h1>
+    <section className="w-full relative bg-gradient-to-br from-white to-gray-50">
+      <div className="max-w-7xl mx-auto px-4 sm:px-6 lg:px-8 py-12 md:py-16">
+        <div className="grid grid-cols-1 lg:grid-cols-[60%_40%] gap-8 lg:gap-12 items-center">
+          {/* Left column: Text content */}
+          <div className="order-2 lg:order-1">
+            <h1 className="text-4xl sm:text-5xl md:text-6xl font-heading font-black text-gray-900 mb-6 leading-tight">
+              Know what we know.
+              <br />
+              Find what we don't.
+              <br />
+              Plan what's next.
+            </h1>
 
-          <p className="text-xl text-white font-bold mb-4 leading-relaxed">
-            572 studies analyzed. 173 critical unknowns identified.
-          </p>
-          <p className="text-xl text-white font-bold mb-12 leading-relaxed">
-            Zero guesswork. One mission: Get humans to Mars safely.
-          </p>
+            <p className="text-lg md:text-xl text-gray-700 font-semibold mb-8 leading-relaxed">
+              Evidence-driven decisions for Lunar, Mars, and ISS missions
+            </p>
 
-          <div className="flex flex-wrap gap-4">
-            <div className="bg-white/20 backdrop-blur-lg border-2 border-white/30 rounded-xl px-8 py-6">
-              <div className="text-5xl font-black text-white mb-2">2,847</div>
-              <div className="text-lg text-white font-semibold uppercase tracking-wide">Connections</div>
-            </div>
-            <div className="bg-white/20 backdrop-blur-lg border-2 border-white/30 rounded-xl px-8 py-6">
-              <div className="text-5xl font-black text-white mb-2">173</div>
-              <div className="text-lg text-white font-semibold uppercase tracking-wide">Critical Gaps</div>
-            </div>
-            <div className="bg-white/20 backdrop-blur-lg border-2 border-white/30 rounded-xl px-8 py-6">
-              <div className="text-5xl font-black text-white mb-2">572</div>
-              <div className="text-lg text-white font-semibold uppercase tracking-wide">Publications</div>
+            <div className="flex flex-wrap gap-4">
+              <div className="bg-white border-2 border-gray-200 rounded-xl px-6 py-4 shadow-sm hover:shadow-md transition-shadow">
+                <div className="text-3xl md:text-4xl font-black text-blue-600 mb-1">28,864</div>
+                <div className="text-sm md:text-base text-gray-700 font-semibold">Evidence Relations</div>
+              </div>
+              <div className="bg-white border-2 border-gray-200 rounded-xl px-6 py-4 shadow-sm hover:shadow-md transition-shadow">
+                <div className="text-3xl md:text-4xl font-black text-blue-600 mb-1">173</div>
+                <div className="text-sm md:text-base text-gray-700 font-semibold">Critical Gaps</div>
+              </div>
+              <div className="bg-white border-2 border-gray-200 rounded-xl px-6 py-4 shadow-sm hover:shadow-md transition-shadow">
+                <div className="text-3xl md:text-4xl font-black text-blue-600 mb-1">572</div>
+                <div className="text-sm md:text-base text-gray-700 font-semibold">Publications</div>
+              </div>
             </div>
           </div>
-        </div>
 
-        {/* Right column: Astronaut image */}
-        <div className="relative min-h-[420px] lg:min-h-[640px]">
-          <div className="absolute inset-0 opacity-40">
-            <img src="/astronaut-in-space-suit-floating.jpg" alt="" className="w-full h-full object-cover" />
+          {/* Right column: Astronaut image */}
+          <div className="order-1 lg:order-2 w-full">
+            <div className="relative w-full aspect-square max-w-md mx-auto lg:max-w-none">
+              <img
+                src="/astronaut-in-space-suit-floating.jpg"
+                alt="Astronaut in space suit floating in microgravity environment"
+                className="w-full h-full object-contain rounded-2xl"
+              />
+            </div>
           </div>
-          {/* Gradient overlay for better blend */}
-          <div className="absolute inset-0 bg-gradient-to-l from-transparent via-[#07173F]/30 to-[#07173F]" />
         </div>
       </div>
     </section>

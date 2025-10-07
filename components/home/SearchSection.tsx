@@ -34,10 +34,10 @@ export default function SearchSection() {
   }
 
   return (
-    <section className="py-16 bg-white">
-      <div className="max-w-4xl mx-auto px-6 text-center">
+    <section className="py-12 md:py-16 bg-white">
+      <div className="max-w-4xl mx-auto px-4 sm:px-6 lg:px-8 text-center">
         <div className="flex items-center justify-center gap-3 mb-4">
-          <h2 className="text-3xl sm:text-4xl font-heading font-bold text-gray-900">
+          <h2 className="text-2xl sm:text-3xl md:text-4xl font-heading font-bold text-gray-900">
             Ask ARIA anything about space biology evidence
           </h2>
           <div className="relative group">
@@ -47,28 +47,28 @@ export default function SearchSection() {
             <div className="absolute left-1/2 -translate-x-1/2 bottom-full mb-2 hidden group-hover:block w-72 bg-gray-900 text-white text-sm rounded-lg p-4 shadow-xl z-10">
               <strong>ARIA</strong>: Artemis Research Intelligence Assistant
               <br />
-              AI-powered search across 572 NASA studies with section-aware retrieval
+              AI-powered 2-second search across 572 NASA studies with section-aware retrieval
             </div>
           </div>
         </div>
 
-        <p className="text-lg text-gray-600 mb-8">
+        <p className="text-base md:text-lg text-gray-600 mb-8 leading-relaxed">
           Section-aware answers with citations, confidence and contradiction detection
         </p>
 
         <form onSubmit={submit} className="relative mb-6">
           <div className="relative">
-            <MessageCircle className="absolute left-5 top-5 w-6 h-6 text-gray-400" />
+            <MessageCircle className="absolute left-5 top-1/2 -translate-y-1/2 w-6 h-6 text-gray-400" />
             <input
               type="text"
               value={q}
               onChange={(e) => setQ(e.target.value)}
               placeholder="What's the biggest risk for a 9-month Mars transit?"
-              className="w-full h-16 pl-14 pr-32 text-base rounded-full border-2 border-gray-300 focus:border-[#0042A6] focus:ring-4 focus:ring-[#0960E1]/20 transition-all outline-none"
+              className="w-full h-14 md:h-16 pl-14 pr-32 text-base rounded-full border-2 border-gray-300 focus:border-blue-600 focus:ring-4 focus:ring-blue-600/20 transition-all outline-none"
             />
             <button
               type="submit"
-              className="absolute right-2 top-2 px-8 py-3 bg-[#0042A6] hover:bg-[#07173F] text-white font-semibold rounded-full transition-colors"
+              className="absolute right-2 top-1/2 -translate-y-1/2 px-6 md:px-8 py-2.5 md:py-3 bg-blue-600 hover:bg-blue-700 text-white font-semibold rounded-full transition-colors min-h-[44px]"
             >
               Ask
             </button>
