@@ -32,7 +32,7 @@ export default function RootLayout({ children }: { children: React.ReactNode }) 
         {supabaseHost && <link rel="preconnect" href={`https://${supabaseHost}`} crossOrigin="" />}
         <link rel="preconnect" href="https://api.groq.com" crossOrigin="" />
       </head>
-      <body className="antialiased">{children}</body>
+      <body className="antialiased overflow-x-hidden max-w-full">{children}</body>
     </html>
   )
 }

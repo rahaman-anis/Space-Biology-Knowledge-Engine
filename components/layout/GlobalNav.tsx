@@ -4,16 +4,7 @@ import Link from "next/link"
 import { usePathname } from "next/navigation"
 import { useState, useEffect, useRef } from "react"
 import { Menu, X } from "lucide-react"
-
-const navLinks = [
-  { label: "Home", href: "/" },
-  { label: "Ask ARIA", href: "/aria" },
-  { label: "Search", href: "/search" },
-  { label: "Explore Topics", href: "/evidence" },
-  { label: "Identify Gaps", href: "/gaps" },
-  { label: "Map Evidence", href: "/graph" },
-  { label: "Methods", href: "/methods" },
-]
+import { NAV_ITEMS } from "@/lib/nav"
 
 export default function GlobalNav() {
   const pathname = usePathname()
@@ -58,7 +49,7 @@ export default function GlobalNav() {
         </div>
 
         <div className="hidden md:flex items-center gap-8">
-          {navLinks.map((l) => {
+          {NAV_ITEMS.map((l) => {
             const active = isActive(l.href)
             return (
               <Link
@@ -102,7 +93,7 @@ export default function GlobalNav() {
             </button>
           </div>
           <div className="flex flex-col py-2">
-            {navLinks.map((l) => (
+            {NAV_ITEMS.map((l) => (
               <Link
                 key={l.href}
                 href={l.href}

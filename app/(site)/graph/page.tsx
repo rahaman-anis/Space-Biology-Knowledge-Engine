@@ -448,8 +448,8 @@ export default function GraphPage() {
       subtitle=""
       breadcrumbs={[{ label: "Home", href: "/" }, { label: "Map Evidence" }]}
     >
-      <div className="bg-white rounded-xl p-8 shadow-lg mb-8">
-        <h2 className="text-2xl font-bold text-gray-900 mb-4">
+      <div className="bg-white rounded-xl p-4 md:p-8 shadow-lg mb-8">
+        <h2 className="text-xl md:text-2xl font-bold text-gray-900 mb-4">
           Visualize 28,864 evidence relations across the space biology corpus
         </h2>
         <div className="space-y-4 text-gray-700 leading-relaxed">
@@ -497,47 +497,49 @@ export default function GraphPage() {
         </div>
       </div>
 
-      <div className="bg-white rounded-xl p-6 shadow-lg mb-8 flex flex-wrap gap-4">
-        <div className="flex-1 min-w-[200px]">
-          <label className="block text-sm font-semibold text-gray-700 mb-2">Topic</label>
-          <select
-            value={selectedTopic}
-            onChange={(e) => setSelectedTopic(e.target.value)}
-            className="w-full px-4 py-2 border-2 border-gray-300 rounded-lg focus:ring-2 focus:ring-primary-300 focus:border-primary-500 outline-none"
-          >
-            <option value="all">All Topics</option>
-            <option value="bone">Bone</option>
-            <option value="immune">Immune</option>
-            <option value="radiation">Radiation</option>
-            <option value="muscle">Muscle</option>
-            <option value="cardiovascular">Cardiovascular</option>
-          </select>
-        </div>
+      <div className="bg-white rounded-xl p-4 md:p-6 shadow-lg mb-8">
+        <div className="grid grid-cols-1 sm:grid-cols-2 lg:grid-cols-3 gap-4">
+          <div className="min-w-0">
+            <label className="block text-sm font-semibold text-gray-700 mb-2">Topic</label>
+            <select
+              value={selectedTopic}
+              onChange={(e) => setSelectedTopic(e.target.value)}
+              className="w-full px-4 py-2 border-2 border-gray-300 rounded-lg focus:ring-2 focus:ring-primary-300 focus:border-primary-500 outline-none min-h-[44px]"
+            >
+              <option value="all">All Topics</option>
+              <option value="bone">Bone</option>
+              <option value="immune">Immune</option>
+              <option value="radiation">Radiation</option>
+              <option value="muscle">Muscle</option>
+              <option value="cardiovascular">Cardiovascular</option>
+            </select>
+          </div>
 
-        <div className="flex-1 min-w-[200px]">
-          <label className="block text-sm font-semibold text-gray-700 mb-2">Relation Type</label>
-          <select
-            value={selectedRelation}
-            onChange={(e) => setSelectedRelation(e.target.value)}
-            className="w-full px-4 py-2 border-2 border-gray-300 rounded-lg focus:ring-2 focus:ring-primary-300 focus:border-primary-500 outline-none"
-          >
-            <option value="all">All Relations</option>
-            <option value="supports">Supports Only</option>
-            <option value="contradicts">Contradicts Only</option>
-          </select>
-        </div>
+          <div className="min-w-0">
+            <label className="block text-sm font-semibold text-gray-700 mb-2">Relation Type</label>
+            <select
+              value={selectedRelation}
+              onChange={(e) => setSelectedRelation(e.target.value)}
+              className="w-full px-4 py-2 border-2 border-gray-300 rounded-lg focus:ring-2 focus:ring-primary-300 focus:border-primary-500 outline-none min-h-[44px]"
+            >
+              <option value="all">All Relations</option>
+              <option value="supports">Supports Only</option>
+              <option value="contradicts">Contradicts Only</option>
+            </select>
+          </div>
 
-        <div className="flex-1 min-w-[200px]">
-          <label className="block text-sm font-semibold text-gray-700 mb-2">Node Limit: {limit}</label>
-          <input
-            type="range"
-            min="50"
-            max="500"
-            step="50"
-            value={limit}
-            onChange={(e) => setLimit(Number(e.target.value))}
-            className="w-full"
-          />
+          <div className="min-w-0">
+            <label className="block text-sm font-semibold text-gray-700 mb-2">Node Limit: {limit}</label>
+            <input
+              type="range"
+              min="50"
+              max="500"
+              step="50"
+              value={limit}
+              onChange={(e) => setLimit(Number(e.target.value))}
+              className="w-full min-h-[44px]"
+            />
+          </div>
         </div>
       </div>
 
@@ -555,8 +557,8 @@ export default function GraphPage() {
 
       {!error && graphData && graphData.nodes.length > 0 && (
         <>
-          <div className="flex flex-col lg:flex-row gap-6 mb-8">
-            <div className="flex-1">
+          <div className="flex flex-col lg:flex-row gap-6 mb-8 min-w-0">
+            <div className="flex-1 min-w-0">
               <div
                 ref={containerRef}
                 className="relative bg-white rounded-xl shadow-lg flex items-center justify-center overflow-hidden"
@@ -564,52 +566,55 @@ export default function GraphPage() {
               >
                 <svg ref={svgRef} className="w-full h-full" />
 
-                <div className="absolute top-4 right-4 flex flex-col gap-2">
+                <div className="absolute top-2 right-2 md:top-4 md:right-4 flex flex-col gap-2">
                   <button
                     onClick={handleZoomIn}
-                    className="p-2 bg-white rounded-lg shadow-md hover:bg-gray-50 transition-colors border border-gray-200"
+                    className="p-2 bg-white rounded-lg shadow-md hover:bg-gray-50 transition-colors border border-gray-200 min-h-[44px] min-w-[44px]"
                     title="Zoom In"
+                    aria-label="Zoom In"
                   >
                     <ZoomIn className="h-5 w-5 text-gray-700" />
                   </button>
                   <button
                     onClick={handleZoomOut}
-                    className="p-2 bg-white rounded-lg shadow-md hover:bg-gray-50 transition-colors border border-gray-200"
+                    className="p-2 bg-white rounded-lg shadow-md hover:bg-gray-50 transition-colors border border-gray-200 min-h-[44px] min-w-[44px]"
                     title="Zoom Out"
+                    aria-label="Zoom Out"
                   >
                     <ZoomOut className="h-5 w-5 text-gray-700" />
                   </button>
                   <button
                     onClick={handleResetZoom}
-                    className="p-2 bg-white rounded-lg shadow-md hover:bg-gray-50 transition-colors border border-gray-200"
+                    className="p-2 bg-white rounded-lg shadow-md hover:bg-gray-50 transition-colors border border-gray-200 min-h-[44px] min-w-[44px]"
                     title="Reset View"
+                    aria-label="Reset View"
                   >
                     <Maximize2 className="h-5 w-5 text-gray-700" />
                   </button>
                 </div>
 
-                <div className="absolute bottom-4 left-4 bg-white/90 backdrop-blur-sm rounded-lg shadow-md px-4 py-2 text-sm text-gray-600">
+                <div className="absolute bottom-2 left-2 md:bottom-4 md:left-4 bg-white/90 backdrop-blur-sm rounded-lg shadow-md px-3 py-2 md:px-4 text-xs md:text-sm text-gray-600 max-w-[calc(100%-1rem)]">
                   <p className="font-medium mb-1">Controls:</p>
-                  <p>• Drag nodes to reposition</p>
-                  <p>• Mouse wheel to zoom</p>
-                  <p>• Click and drag background to pan</p>
+                  <p className="break-words">• Drag nodes to reposition</p>
+                  <p className="break-words">• Mouse wheel to zoom</p>
+                  <p className="break-words">• Click and drag background to pan</p>
                 </div>
               </div>
             </div>
 
-            <div className="lg:w-80 space-y-6">
-              <div className="bg-white rounded-xl p-6 shadow-lg">
-                <h3 className="text-lg font-bold text-gray-900 mb-4">Graph Legend</h3>
+            <div className="w-full lg:w-80 space-y-6 min-w-0">
+              <div className="bg-white rounded-xl p-4 md:p-6 shadow-lg">
+                <h3 className="text-base md:text-lg font-bold text-gray-900 mb-4">Graph Legend</h3>
                 <div className="space-y-4">
                   <div>
                     <h4 className="text-sm font-semibold text-gray-700 mb-2">Relations</h4>
                     <div className="space-y-2">
                       <div className="flex items-center gap-2">
-                        <div className="w-8 h-1" style={{ backgroundColor: "#16A34A" }}></div>
+                        <div className="w-8 h-1 flex-shrink-0" style={{ backgroundColor: "#16A34A" }}></div>
                         <span className="text-sm text-gray-700">Supports</span>
                       </div>
                       <div className="flex items-center gap-2">
-                        <div className="w-8 h-1" style={{ backgroundColor: "#DC2626" }}></div>
+                        <div className="w-8 h-1 flex-shrink-0" style={{ backgroundColor: "#DC2626" }}></div>
                         <span className="text-sm text-gray-700">Contradicts</span>
                       </div>
                     </div>
@@ -618,24 +623,36 @@ export default function GraphPage() {
                     <h4 className="text-sm font-semibold text-gray-700 mb-2">Topics</h4>
                     <div className="space-y-2">
                       <div className="flex items-center gap-2">
-                        <div className="w-4 h-4 rounded-full" style={{ backgroundColor: TOPIC_COLORS.bone }}></div>
+                        <div
+                          className="w-4 h-4 rounded-full flex-shrink-0"
+                          style={{ backgroundColor: TOPIC_COLORS.bone }}
+                        ></div>
                         <span className="text-sm text-gray-700">Bone</span>
                       </div>
                       <div className="flex items-center gap-2">
-                        <div className="w-4 h-4 rounded-full" style={{ backgroundColor: TOPIC_COLORS.immune }}></div>
+                        <div
+                          className="w-4 h-4 rounded-full flex-shrink-0"
+                          style={{ backgroundColor: TOPIC_COLORS.immune }}
+                        ></div>
                         <span className="text-sm text-gray-700">Immune</span>
                       </div>
                       <div className="flex items-center gap-2">
-                        <div className="w-4 h-4 rounded-full" style={{ backgroundColor: TOPIC_COLORS.radiation }}></div>
+                        <div
+                          className="w-4 h-4 rounded-full flex-shrink-0"
+                          style={{ backgroundColor: TOPIC_COLORS.radiation }}
+                        ></div>
                         <span className="text-sm text-gray-700">Radiation</span>
                       </div>
                       <div className="flex items-center gap-2">
-                        <div className="w-4 h-4 rounded-full" style={{ backgroundColor: TOPIC_COLORS.muscle }}></div>
+                        <div
+                          className="w-4 h-4 rounded-full flex-shrink-0"
+                          style={{ backgroundColor: TOPIC_COLORS.muscle }}
+                        ></div>
                         <span className="text-sm text-gray-700">Muscle</span>
                       </div>
                       <div className="flex items-center gap-2">
                         <div
-                          className="w-4 h-4 rounded-full"
+                          className="w-4 h-4 rounded-full flex-shrink-0"
                           style={{ backgroundColor: TOPIC_COLORS.cardiovascular }}
                         ></div>
                         <span className="text-sm text-gray-700">Cardiovascular</span>
@@ -645,18 +662,18 @@ export default function GraphPage() {
                 </div>
               </div>
 
-              <div className="bg-white rounded-xl p-6 shadow-lg">
-                <h3 className="text-lg font-bold text-gray-900 mb-4">Quick Insights</h3>
+              <div className="bg-white rounded-xl p-4 md:p-6 shadow-lg">
+                <h3 className="text-base md:text-lg font-bold text-gray-900 mb-4">Quick Insights</h3>
                 <div className="space-y-3">
                   <div className="py-2 border-b border-gray-100">
                     <span className="text-sm font-medium text-gray-700 block mb-1">Most connected study:</span>
-                    <span className="text-sm text-gray-900">
+                    <span className="text-sm text-gray-900 break-words">
                       {insights?.most ? `${insights.most.label} (${insights.most.deg} connections)` : "—"}
                     </span>
                   </div>
                   <div className="py-2 border-b border-gray-100">
                     <span className="text-sm font-medium text-gray-700 block mb-1">Biggest controversy:</span>
-                    <span className="text-sm text-gray-900">
+                    <span className="text-sm text-gray-900 break-words">
                       {insights?.controversy
                         ? `${insights.controversy.topic} (${Math.round(insights.controversy.share * 100)}% contradictions)`
                         : "—"}
@@ -664,7 +681,7 @@ export default function GraphPage() {
                   </div>
                   <div className="py-2 border-b border-gray-100">
                     <span className="text-sm font-medium text-gray-700 block mb-1">Strongest consensus:</span>
-                    <span className="text-sm text-gray-900">
+                    <span className="text-sm text-gray-900 break-words">
                       {insights?.consensus
                         ? `${insights.consensus.topic} (${Math.round(insights.consensus.share * 100)}% supports)`
                         : "—"}

@@ -1,9 +1,13 @@
 "use client"
 import { useRef } from "react"
 import { useFocusTrap } from "@/hooks/useFocusTrap"
+import { NAV_ITEMS } from "@/lib/nav"
+import { usePathname } from "next/navigation"
+import Link from "next/link"
 
 export default function MobileMenu({ open, onClose }: { open: boolean; onClose: () => void }) {
   const ref = useRef<HTMLDivElement>(null)
+  const pathname = usePathname()
   useFocusTrap(ref, open, onClose)
   if (!open) return null
 
@@ -24,42 +28,28 @@ export default function MobileMenu({ open, onClose }: { open: boolean; onClose: 
           <button
             aria-label="Close menu"
             onClick={onClose}
-            className="rounded px-2 py-1 focus-visible:ring-2 focus-visible:ring-primary-300"
+            className="rounded px-2 py-1 min-h-[44px] min-w-[44px] focus-visible:ring-2 focus-visible:ring-primary-300"
           >
             ✕
           </button>
         </div>
         <nav aria-label="Mobile navigation" className="flex flex-col">
-          <a
-            href="/"
-            className="text-lg py-3 hover:bg-nasa-electric-blue rounded focus-visible:ring-2 focus-visible:ring-primary-300"
-          >
-            Home
-          </a>
-          <a
-            href="/aria"
-            className="text-lg py-3 hover:bg-nasa-electric-blue rounded focus-visible:ring-2 focus-visible:ring-primary-300"
-          >
-            ARIA Q&A
-          </a>
-          <a
-            href="/evidence/bone-loss"
-            className="text-lg py-3 hover:bg-nasa-electric-blue rounded focus-visible:ring-2 focus-visible:ring-primary-300"
-          >
-            Browse Evidence
-          </a>
-          <a
-            href="/gaps"
-            className="text-lg py-3 hover:bg-nasa-electric-blue rounded focus-visible:ring-2 focus-visible:ring-primary-300"
-          >
-            Explore Gaps
-          </a>
-          <a
-            href="/methods"
-            className="text-lg py-3 hover:bg-nasa-electric-blue rounded focus-visible:ring-2 focus-visible:ring-primary-300"
-          >
-            Methods
-          </a>
+          {NAV_ITEMS.map((item) => {
+            const isActive = pathname === item.href || (item.href !== "/" && pathname.startsWith(item.href))
+            return (
+              <Link
+                key={item.href}
+                href={item.href}
+                onClick={onClose}
+                className={`text-lg py-3 px-2 rounded min-h-[44px] focus-visible:ring-2 focus-visible:ring-primary-300 ${
+                  isActive ? "bg-nasa-electric-blue font-semibold" : "hover:bg-nasa-electric-blue"
+                }`}
+                aria-current={isActive ? "page" : undefined}
+              >
+                {item.label}
+              </Link>
+            )
+          })}
         </nav>
       </div>
     </div>
