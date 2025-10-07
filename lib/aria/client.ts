@@ -25,6 +25,8 @@ export async function searchPassages(params: SearchParams): Promise<SearchResult
     const r = await fetch("/api/aria/search", {
       method: "POST",
       headers: { "Content-Type": "application/json" },
+      // Avoid any stale cached responses from the edge/network
+      cache: "no-store",
       body: JSON.stringify({
         query: params.q,
         k: params.topK || 8,
@@ -38,28 +40,41 @@ export async function searchPassages(params: SearchParams): Promise<SearchResult
     }
     const data = await r.json()
 
-    if (data.ok && Array.isArray(data.evidences)) {
-      const results: EvidenceRow[] = data.evidences.map((e: any) => {
-        const snippet = e.snippet || e.text || "[No passage text available]"
-        const section = (e.section || "Unknown") as SectionType
-        const sectionKey = section.toLowerCase() as Lowercase<SectionType>
+    // Accept either {evidences: [...]} or {results: [...]} and tolerate missing ok flag
+    const raw = Array.isArray(data?.evidences)
+      ? data.evidences
+      : Array.isArray(data?.results)
+      ? data.results
+      : []
+
+    if (raw.length) {
+      const pick = (o: any, keys: string[]) => {
+        for (const k of keys) if (o && typeof o[k] === "string" && o[k].trim()) return o[k]
+        return ""
+      }
+
+      const results: EvidenceRow[] = raw.map((e: any) => {
+        const snippet =
+          pick(e, ["snippet", "text", "abstract", "abstract_text", "content", "chunk"]) ||
+          "[No passage text available]"
+        // Default to "All" (not "Unknown") so UI filters don’t hide these rows
+        const section = ((e.section as string) || "All") as SectionType
+        const sectionKey = (section.toLowerCase() as unknown) as Lowercase<SectionType>
 
         return {
           pmcid: e.pmcid,
           title: e.title || "Untitled",
-          year: e.year || null,
+          year: e.year ?? null,
           section,
           snippet,
-          score: e.score || 0,
-          confidence: "Medium" as Confidence,
-          relevance: e.score || 0,
-          sections: {
-            [sectionKey]: snippet,
-          } as Partial<Record<Lowercase<SectionType>, string>>,
+          score: Number(e.score ?? 0) || 0,
+          confidence: ("Medium" as unknown) as Confidence,
+          relevance: Number(e.score ?? 0) || 0,
+          sections: { [sectionKey]: snippet } as Partial<Record<Lowercase<SectionType>, string>>,
           primary_section: sectionKey,
         }
       })
-      return { ok: true, results, hint: data.hint, examples: data.examples }
+      return { ok: true, results, hint: data.hint, examples: data.examples, source: "API" }
     }
     return { ok: false, error: "Invalid response format" }
   } catch (e: any) {
@@ -73,7 +88,8 @@ export async function askAnswer(question: string): Promise<AnswerResult> {
     const searchRes = await fetch("/api/aria/search", {
       method: "POST",
       headers: { "Content-Type": "application/json" },
-      body: JSON.stringify({ query: question, k: 8, mode: "both" }),
+      cache: "no-store",
+      body: JSON.stringify({ question, k: 8, mode: "both" }),
     })
 
     if (!searchRes.ok) {
@@ -110,23 +126,26 @@ export async function askAnswer(question: string): Promise<AnswerResult> {
 
     const answerData = await answerRes.json()
     if (answerData.ok && answerData.answer) {
+      const pick = (o: any, keys: string[]) => {
+        for (const k of keys) if (o && typeof o[k] === "string" && o[k].trim()) return o[k]
+        return ""
+      }
       const evidence: EvidenceRow[] = evidences.map((e: any) => {
-        const snippet = e.snippet || e.text || "[No passage text available]"
-        const section = (e.section || "Unknown") as SectionType
-        const sectionKey = section.toLowerCase() as Lowercase<SectionType>
-
+        const snippet =
+          pick(e, ["snippet", "text", "abstract", "abstract_text", "content", "chunk"]) ||
+          "[No passage text available]"
+        const section = ((e.section as string) || "All") as SectionType
+        const sectionKey = (section.toLowerCase() as unknown) as Lowercase<SectionType>
         return {
           pmcid: e.pmcid,
           title: e.title || "Untitled",
-          year: e.year || null,
+          year: e.year ?? null,
           section,
           snippet,
-          score: e.score || 0,
-          confidence: "Medium" as Confidence,
-          relevance: e.score || 0,
-          sections: {
-            [sectionKey]: snippet,
-          } as Partial<Record<Lowercase<SectionType>, string>>,
+          score: Number(e.score ?? 0) || 0,
+          confidence: ("Medium" as unknown) as Confidence,
+          relevance: Number(e.score ?? 0) || 0,
+          sections: { [sectionKey]: snippet } as Partial<Record<Lowercase<SectionType>, string>>,
           primary_section: sectionKey,
         }
       })
