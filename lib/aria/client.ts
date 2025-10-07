@@ -20,15 +20,20 @@ export type AnswerResult =
   | { ok: true; answer: string; evidence: EvidenceRow[]; model?: string }
   | { ok: false; error: string }
 
+// Small helper: pick the first non-empty string across a set of keys
+function pick(o: any, keys: string[]): string {
+  for (const k of keys) if (o && typeof o[k] === "string" && o[k].trim()) return o[k]
+  return ""
+}
+
 export async function searchPassages(params: SearchParams): Promise<SearchResult> {
   try {
     const r = await fetch("/api/aria/search", {
       method: "POST",
       headers: { "Content-Type": "application/json" },
-      // Avoid any stale cached responses from the edge/network
-      cache: "no-store",
+      cache: "no-store", // avoid stale edge/browser cache
       body: JSON.stringify({
-        query: params.q,
+        query: params.q, // IMPORTANT: the API expects `query`, not `question`
         k: params.topK || 8,
         mode: params.mode === "documents" ? "docs" : params.mode === "passages" ? "passages" : "both",
         minScore: 0,
@@ -40,24 +45,19 @@ export async function searchPassages(params: SearchParams): Promise<SearchResult
     }
     const data = await r.json()
 
-    // Accept either {evidences: [...]} or {results: [...]} and tolerate missing ok flag
-    const raw = Array.isArray(data?.evidences)
+    // Accept either {evidences:[...]} or {results:[...]}
+    const raw: any[] = Array.isArray(data?.evidences)
       ? data.evidences
       : Array.isArray(data?.results)
       ? data.results
       : []
 
     if (raw.length) {
-      const pick = (o: any, keys: string[]) => {
-        for (const k of keys) if (o && typeof o[k] === "string" && o[k].trim()) return o[k]
-        return ""
-      }
-
       const results: EvidenceRow[] = raw.map((e: any) => {
         const snippet =
           pick(e, ["snippet", "text", "abstract", "abstract_text", "content", "chunk"]) ||
           "[No passage text available]"
-        // Default to "All" (not "Unknown") so UI filters don’t hide these rows
+        // Default to "All" so UI filters don’t hide rows when section is missing
         const section = ((e.section as string) || "All") as SectionType
         const sectionKey = (section.toLowerCase() as unknown) as Lowercase<SectionType>
 
@@ -76,7 +76,9 @@ export async function searchPassages(params: SearchParams): Promise<SearchResult
       })
       return { ok: true, results, hint: data.hint, examples: data.examples, source: "API" }
     }
-    return { ok: false, error: "Invalid response format" }
+
+    // Bubble up server-provided hint so the UI shows something helpful
+    return { ok: false, error: data?.hint || "No evidence found." }
   } catch (e: any) {
     return { ok: false, error: String(e?.message || e) }
   }
@@ -84,12 +86,12 @@ export async function searchPassages(params: SearchParams): Promise<SearchResult
 
 export async function askAnswer(question: string): Promise<AnswerResult> {
   try {
-    // Step 1: Search for evidence
+    // 1) Search for evidence first (use `query`, not `question`)
     const searchRes = await fetch("/api/aria/search", {
       method: "POST",
       headers: { "Content-Type": "application/json" },
       cache: "no-store",
-      body: JSON.stringify({ question, k: 8, mode: "both" }),
+      body: JSON.stringify({ query: question, k: 8, mode: "both" }),
     })
 
     if (!searchRes.ok) {
@@ -102,20 +104,19 @@ export async function askAnswer(question: string): Promise<AnswerResult> {
       return { ok: false, error: `Search failed: ${searchData.error || "Unknown error"}` }
     }
 
-    const evidences = searchData.evidences || []
-
-    // If no evidences found, return the hint/examples
-    if (evidences.length === 0) {
+    const evidences: any[] = searchData.evidences || []
+    if (!evidences.length) {
       return {
         ok: false,
-        error: searchData.hint || "No evidence found. Try different keywords or check the examples provided.",
+        error: searchData.hint || "No evidence found. Try different keywords or check the examples.",
       }
     }
 
-    // Step 2: Call answer API with evidences
+    // 2) Ask the answer endpoint with the evidence list
     const answerRes = await fetch("/api/aria/answer", {
       method: "POST",
       headers: { "Content-Type": "application/json" },
+      cache: "no-store",
       body: JSON.stringify({ question, evidences }),
     })
 
@@ -126,10 +127,6 @@ export async function askAnswer(question: string): Promise<AnswerResult> {
 
     const answerData = await answerRes.json()
     if (answerData.ok && answerData.answer) {
-      const pick = (o: any, keys: string[]) => {
-        for (const k of keys) if (o && typeof o[k] === "string" && o[k].trim()) return o[k]
-        return ""
-      }
       const evidence: EvidenceRow[] = evidences.map((e: any) => {
         const snippet =
           pick(e, ["snippet", "text", "abstract", "abstract_text", "content", "chunk"]) ||
