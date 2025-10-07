@@ -10,12 +10,10 @@ interface Props {
 }
 
 export function PresetQuestionCard({ emoji, question, subtitle, fullQuestion, borderColor, onSelect }: Props) {
-  const borderClass = `aria-preset-border-${borderColor}`
-
   return (
     <button
       onClick={() => onSelect(fullQuestion)}
-      className={`aria-preset-card-hover ${borderClass} aria-preset-border bg-white rounded-xl p-5 text-left transition-all duration-200 focus:outline-none focus:ring-2 focus:ring-primary`}
+      className="rounded-xl border border-gray-200 bg-white p-5 hover:shadow-md transition-shadow text-left focus:outline-none focus:ring-2 focus:ring-primary"
       data-testid="aria-preset-card"
     >
       <div className="flex items-start justify-between gap-4">

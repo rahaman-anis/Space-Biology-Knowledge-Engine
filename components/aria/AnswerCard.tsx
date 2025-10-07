@@ -1,6 +1,7 @@
 "use client"
 
 import { Loader2, AlertTriangle } from "lucide-react"
+import { sanitizeBullets } from "@/components/aria/answer/sanitizeBullets"
 
 interface AnswerCardProps {
   isStreaming: boolean
@@ -69,27 +70,16 @@ export function AnswerCard({ isStreaming, text, error }: AnswerCardProps) {
       return true
     })
 
-    // Clamp to 3-5 bullets
-    keyFindings = keyFindings.slice(0, 5)
-
-    // If fewer than 3 bullets and we have evidence, synthesize from evidence
-    // (This is a safety fallback - the model should return 3-5)
-    if (keyFindings.length < 3 && keyFindings.length > 0) {
-      // Just ensure we have at least what the model gave us
-      // Don't synthesize - trust the model's output
-    }
-
-    // Append PMCIDs to bullets that don't already have them
-    // Note: The model should already include PMCIDs, but this is a safety fallback
-    const pmcidPattern = /\[PMC\d+(?:,\s*PMC\d+)?\]$/
-    keyFindings = keyFindings.map((bullet) => {
-      // If bullet already ends with PMCID, keep it as-is
-      if (pmcidPattern.test(bullet.trim())) {
-        return bullet
-      }
-      // Otherwise, the model should have included it - don't modify
-      return bullet
-    })
+    // Extract PMCIDs from sources for fallback
+    const fallbackPmcs = Array.from(
+      new Set(
+        sources
+          .match(/PMC\d+/g)
+          ?.map((m) => m.replace("PMC", ""))
+          .filter(Boolean) || [],
+      ),
+    )
+    keyFindings = sanitizeBullets(keyFindings, fallbackPmcs, 3, 5)
 
     return { verdict, keyFindings, sources }
   }

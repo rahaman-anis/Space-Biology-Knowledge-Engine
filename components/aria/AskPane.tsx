@@ -10,6 +10,7 @@ import { AnswerCard } from "./AnswerCard"
 import { EvidenceAccordion } from "./EvidenceAccordion"
 import { askAnswer } from "@/lib/aria/client"
 import type { EvidenceRow } from "@/lib/aria/schema"
+import { usePmcidMeta } from "@/hooks/usePmcidMeta"
 
 export function AskPane() {
   const [question, setQuestion] = useState("")
@@ -72,6 +73,21 @@ export function AskPane() {
     event.preventDefault()
     handleAskAria(question)
   }
+
+  const askCitations = (evidences || []) as Array<{
+    pmcid: string
+    section?: string
+    confidence?: string
+    year?: number
+  }>
+  const pmcids = Array.from(new Set(askCitations.map((c) => c.pmcid).filter(Boolean)))
+  const { meta: metaById } = usePmcidMeta(pmcids)
+
+  const evidenceRows = evidences.map((c) => ({
+    ...c,
+    title: metaById[c.pmcid]?.title ?? c.title ?? null,
+    year: c.year ?? metaById[c.pmcid]?.year ?? null,
+  }))
 
   return (
     <div className="space-y-8 mt-6">
@@ -182,7 +198,7 @@ export function AskPane() {
         </div>
       )}
 
-      {hasSearched && <EvidenceAccordion results={evidences} />}
+      {hasSearched && <EvidenceAccordion results={evidenceRows} />}
     </div>
   )
 }
