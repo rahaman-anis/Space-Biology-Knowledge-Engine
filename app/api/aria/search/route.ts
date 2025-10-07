@@ -44,6 +44,86 @@ const META_TABLE_CANDIDATES = [
   "doc_metadata_enriched",                 // legacy name some deployments use
 ].filter(Boolean) as string[]
 
+const ABSTRACT_TABLE_CANDIDATES = [
+  process.env.NEXT_PUBLIC_ABSTRACTS_TABLE, // preferred via env
+  "abstracts_norm",                        // normalized view (if created)
+  "abstracts",                             // raw abstracts table
+  "documents_abstracts",                   // sometimes used
+  "documents_stage",                       // staging view with abstracts in some setups
+  "documents",                             // if abstracts live on the main table
+  "imrad_spans",                           // derive Abstract from sectioned spans
+].filter(Boolean) as string[]
+
+async function fetchAbstractMap(
+  supabase: ReturnType<typeof createClient>,
+  pmcids: string[],
+): Promise<{ map: Record<string, string>; usedTable: string | null; usedColumn: string | null }> {
+  const textCols = ["abstract", "abstract_text", "text", "content", "body"]
+  const out: Record<string, string> = {}
+  let usedTable: string | null = null
+  let usedColumn: string | null = null
+
+  for (const t of ABSTRACT_TABLE_CANDIDATES) {
+    try {
+      if (!t) continue
+
+      // Special handling for imrad_spans: pull Abstract section text
+      if (t === "imrad_spans") {
+        const { data, error } = await supabase
+          .from(t)
+          .select("pmcid, section, text, content, chunk")
+          .in("pmcid", pmcids)
+          .limit(3000)
+
+        if (error || !Array.isArray(data) || data.length === 0) continue
+
+        for (const r of data as any[]) {
+          const sec = String(r.section ?? "").toLowerCase()
+          const txt = (r.text ?? r.content ?? r.chunk ?? "") as string
+          if (sec === "abstract" && typeof txt === "string" && txt.trim()) {
+            out[String(r.pmcid)] = txt.trim()
+          }
+        }
+        if (Object.keys(out).length) {
+          usedTable = t
+          usedColumn = "section+text"
+          break
+        }
+        continue
+      }
+
+      // Generic: select all columns, then pick the first viable text column
+      const { data, error } = await supabase
+        .from(t)
+        .select("*")
+        .in("pmcid", pmcids)
+        .limit(2000)
+
+      if (error || !Array.isArray(data) || data.length === 0) continue
+
+      const first = data[0] as Record<string, any>
+      const pick = textCols.find((c) => Object.prototype.hasOwnProperty.call(first, c))
+      if (!pick) continue
+
+      for (const r of data as any[]) {
+        const a = r[pick]
+        if (typeof a === "string" && a.trim()) {
+          out[String(r.pmcid)] = a.trim()
+        }
+      }
+      if (Object.keys(out).length) {
+        usedTable = t
+        usedColumn = pick
+        break
+      }
+    } catch {
+      // Ignore this source and try the next
+      continue
+    }
+  }
+  return { map: out, usedTable, usedColumn }
+}
+
 export async function GET() {
   return NextResponse.json({
     ok: true,
@@ -62,6 +142,9 @@ export async function GET() {
 
 export async function POST(req: Request) {
   const t0 = Date.now()
+  const wantDebug = (() => {
+    try { return new URL(req.url).searchParams.get("debug") === "1" } catch { return false }
+  })()
   try {
     console.log("[v0] /api/aria/search POST started")
 
@@ -286,6 +369,9 @@ export async function POST(req: Request) {
       }
     }
 
+    // ---------- Abstracts fallback for doc-only results ----------
+    const { map: abstracts, usedTable: absTable, usedColumn: absCol } = await fetchAbstractMap(supabase, pmcids)
+
     // ---------- Merge + filter ----------
     const evidences: any[] = []
     for (const p of passages)
@@ -297,15 +383,18 @@ export async function POST(req: Request) {
         snippet: p.text ?? p.snippet ?? null,
         score: typeof p.score === "number" ? p.score : Number(p.score ?? 0) || 0,
       })
-    for (const d of docs)
+    for (const d of docs) {
+      const pmcid = d.pmcid
+      const abstract = abstracts[pmcid]
       evidences.push({
-        pmcid: d.pmcid,
-        title: d.title ?? meta[d.pmcid]?.title ?? null,
-        year: d.year ?? meta[d.pmcid]?.year ?? null,
-        section: "All",
-        snippet: null,
+        pmcid,
+        title: d.title ?? meta[pmcid]?.title ?? null,
+        year:  d.year  ?? meta[pmcid]?.year  ?? null,
+        section: abstract ? "Abstract" : "All",
+        snippet: abstract ? abstract.slice(0, 320) : null,
         score: typeof d.score === "number" ? d.score : Number(d.score ?? 0) || 0,
       })
+    }
 
     const hasMin = typeof minScore === "number" && Number.isFinite(minScore)
     const filtered = evidences
@@ -333,7 +422,23 @@ export async function POST(req: Request) {
     }
 
     console.log(`[v0] Search completed successfully in ${durationMs}ms`)
-    return NextResponse.json({ ok: true, evidences: filtered, durationMs })
+    return NextResponse.json({
+      ok: true,
+      evidences: filtered,
+      durationMs,
+      ...(wantDebug ? {
+        debug: {
+          docsRpcRows: Array.isArray(docsRpc.data) ? docsRpc.data.length : 0,
+          passRpcRows: Array.isArray(passRpc.data) ? passRpc.data.length : 0,
+          docsAfterFallback: docs.length,
+          passagesAfterFallback: passages.length,
+          metaHit: Object.keys(meta).length,
+          abstractsHit: Object.keys(abstracts).length,
+          abstractSource: absTable || null,
+          abstractColumn: absCol || null,
+        }
+      } : {})
+    })
   } catch (e: any) {
     console.error("[v0] Search API error:", e)
     console.error("[v0] Error stack:", e?.stack)
