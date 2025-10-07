@@ -26,23 +26,62 @@ interface GraphData {
   meta?: { count?: { nodes?: number; edges?: number }; reason?: string }
 }
 
+// Canonical topics + colors (must match legend)
 const TOPIC_COLORS: Record<string, string> = {
-  bone: "#EAB308", // yellow
-  immune: "#3B82F6", // blue
-  radiation: "#EF4444", // red
-  muscle: "#10B981", // green
-  cardiovascular: "#EC4899", // pink
+  bone: "#EAB308",
+  immune: "#3B82F6",
+  radiation: "#EF4444",
+  muscle: "#10B981",
+  cardiovascular: "#EC4899",
 }
-const DEFAULT_NODE = "#6B7280" // gray for unknown
+const DEFAULT_NODE_COLOR = "#6B7280"
 
-type Insights = {
-  mostConnected?: { id: string; label: string; degree: number }
-  biggestControversy?: { topic: string; contradicts: number }
-  strongestConsensus?: { topic: string; ratio: number; supports: number; total: number }
-  isolatedCount: number
+// Normalize relation string/flags from edge payloads
+function getRelation(e: any): "supports" | "contradicts" {
+  const raw = String(e.relation ?? e.predicate ?? e.type ?? "").toLowerCase()
+
+  if (raw.includes("contra") || raw.includes("conflict") || raw.includes("oppose") || raw === "red" || raw === "-1")
+    return "contradicts"
+
+  // Numeric fallback (if edge carries weight/score)
+  const w = Number(e.weight ?? e.score ?? e.value)
+  if (!Number.isNaN(w) && w < 0) return "contradicts"
+
+  return "supports"
 }
 
-const EDGE_COLOR = (rel?: string) => (rel === "contradicts" ? "#DC2626" : "#16A34A")
+function normalizeTopic(raw?: any): string | null {
+  if (!raw) return null
+  const t = String(raw).toLowerCase().trim()
+  if (!t) return null
+  if (t.startsWith("bone") || /oste|skelet/.test(t)) return "bone"
+  if (t.startsWith("immune") || /t[-\s]?cell|immun|cytokine|lympho/.test(t)) return "immune"
+  if (t.startsWith("radiat") || /gamma|proton|space[-\s]?radiation|dose/.test(t)) return "radiation"
+  if (t.startsWith("muscle") || /myo|atrophy|sarcopen|ared/.test(t)) return "muscle"
+  if (t.startsWith("cardio") || /cardio|vascular|endotheli/.test(t)) return "cardiovascular"
+  return null
+}
+
+function inferTopic(n: any): string | null {
+  // Most specific → least specific
+  return (
+    normalizeTopic(n.topic) ||
+    normalizeTopic(n.type) ||
+    normalizeTopic(n?.metadata?.topic) ||
+    normalizeTopic(n?.tags?.topic) ||
+    normalizeTopic(n?.label) || // keyword sniff in title/label
+    null
+  )
+}
+
+const EDGE_COLOR = (e: any) => (getRelation(e) === "contradicts" ? "#DC2626" : "#16A34A")
+
+type InsightState = {
+  most?: { label: string; deg: number } | null
+  controversy?: { topic: string; share: number } | null
+  consensus?: { topic: string; share: number } | null
+  isolated: number
+}
 
 export default function GraphPage() {
   const svgRef = useRef<SVGSVGElement>(null)
@@ -55,7 +94,7 @@ export default function GraphPage() {
   const [selectedTopic, setSelectedTopic] = useState<string>("all")
   const [selectedRelation, setSelectedRelation] = useState<string>("all")
   const [limit, setLimit] = useState(200)
-  const [insights, setInsights] = useState<Insights>({ isolatedCount: 0 })
+  const [insights, setInsights] = useState<InsightState>({ isolated: 0 })
 
   const debug = typeof window !== "undefined" && new URLSearchParams(window.location.search).get("debug") === "1"
 
@@ -123,7 +162,7 @@ export default function GraphPage() {
     const g = svg.append("g").attr("transform", `translate(${margin}, ${margin})`)
 
     const edges =
-      selectedRelation === "all" ? graphData.edges : graphData.edges.filter((e) => e.relation === selectedRelation)
+      selectedRelation === "all" ? graphData.edges : graphData.edges.filter((e) => getRelation(e) === selectedRelation)
 
     const nodeMap = new Map(graphData.nodes.map((n) => [n.id, n]))
 
@@ -133,92 +172,149 @@ export default function GraphPage() {
       return nodeMap.has(sourceId) && nodeMap.has(targetId)
     })
 
-    const computeInsights = (): Insights => {
-      // Build degree map
-      const degreeMap = new Map<string, number>()
-      graphData.nodes.forEach((n) => degreeMap.set(n.id, 0))
-
-      validEdges.forEach((e) => {
-        const sourceId = typeof e.source === "string" ? e.source : e.source.id
-        const targetId = typeof e.target === "string" ? e.target : e.target.id
-        degreeMap.set(sourceId, (degreeMap.get(sourceId) || 0) + 1)
-        degreeMap.set(targetId, (degreeMap.get(targetId) || 0) + 1)
-      })
-
-      // Most connected study
-      let mostConnected: Insights["mostConnected"] = undefined
-      let maxDegree = 0
-      graphData.nodes.forEach((n) => {
-        const degree = degreeMap.get(n.id) || 0
-        if (degree > maxDegree) {
-          maxDegree = degree
-          mostConnected = { id: n.id, label: n.label.slice(0, 40), degree }
-        }
-      })
-
-      // Topic-based metrics
-      const topicStats = new Map<string, { supports: number; contradicts: number }>()
-
-      validEdges.forEach((e) => {
-        const sourceNode = nodeMap.get(typeof e.source === "string" ? e.source : e.source.id)
-        const targetNode = nodeMap.get(typeof e.target === "string" ? e.target : e.target.id)
-
-        // Count edge for source node's topic
-        if (sourceNode?.topic) {
-          const topic = sourceNode.topic.toLowerCase()
-          if (!topicStats.has(topic)) {
-            topicStats.set(topic, { supports: 0, contradicts: 0 })
-          }
-          const stats = topicStats.get(topic)!
-          if (e.relation === "supports") stats.supports++
-          else if (e.relation === "contradicts") stats.contradicts++
-        }
-
-        // Count edge for target node's topic
-        if (targetNode?.topic && targetNode.topic !== sourceNode?.topic) {
-          const topic = targetNode.topic.toLowerCase()
-          if (!topicStats.has(topic)) {
-            topicStats.set(topic, { supports: 0, contradicts: 0 })
-          }
-          const stats = topicStats.get(topic)!
-          if (e.relation === "supports") stats.supports++
-          else if (e.relation === "contradicts") stats.contradicts++
-        }
-      })
-
-      let biggestControversy: Insights["biggestControversy"] = undefined
-      let maxRedShare = 0
-      topicStats.forEach((stats, topic) => {
-        const total = stats.supports + stats.contradicts
-        if (total > 0) {
-          const redShare = stats.contradicts / total
-          if (redShare > maxRedShare) {
-            maxRedShare = redShare
-            biggestControversy = { topic, contradicts: stats.contradicts }
-          }
-        }
-      })
-
-      // Strongest consensus (highest ratio, min 10 total edges)
-      let strongestConsensus: Insights["strongestConsensus"] = undefined
-      let maxRatio = 0
-      topicStats.forEach((stats, topic) => {
-        const total = stats.supports + stats.contradicts
-        if (total >= 10) {
-          const ratio = stats.supports / total
-          if (ratio > maxRatio) {
-            maxRatio = ratio
-            strongestConsensus = { topic, ratio, supports: stats.supports, total }
-          }
-        }
-      })
-
-      const isolatedCount = Array.from(degreeMap.values()).filter((d) => d === 0).length
-
-      return { mostConnected, biggestControversy, strongestConsensus, isolatedCount }
+    for (const n of graphData.nodes) {
+      const inferred = inferTopic(n)
+      if (inferred) n.topic = inferred
     }
 
-    setInsights(computeInsights())
+    const nodeById = new Map(graphData.nodes.map((n) => [n.id, n]))
+    const topicVotes: Record<string, Record<string, number>> = {}
+
+    for (const e of validEdges) {
+      const s = typeof (e as any).source === "object" ? (e as any).source.id : (e as any).source
+      const t = typeof (e as any).target === "object" ? (e as any).target.id : (e as any).target
+
+      // Edge may carry topic in different fields
+      const etopic =
+        normalizeTopic((e as any).topic) ??
+        normalizeTopic((e as any).sourceTopic) ??
+        normalizeTopic((e as any).targetTopic)
+
+      if (!etopic) continue
+      for (const id of [s, t]) {
+        if (!id) continue
+        topicVotes[id] ??= {}
+        topicVotes[id][etopic] = (topicVotes[id][etopic] ?? 0) + 1
+      }
+    }
+
+    for (const n of graphData.nodes) {
+      if (n.topic) continue // don't overwrite a good topic
+      const ballot = topicVotes[n.id]
+      if (!ballot) continue
+      let best = ""
+      let max = 0
+      for (const [k, v] of Object.entries(ballot)) {
+        if (v > max) {
+          best = k
+          max = v
+        }
+      }
+      if (best) n.topic = best
+    }
+
+    function computeInsights(nodes: any[], edges: any[]): InsightState {
+      const byId = new Map(nodes.map((n) => [n.id, n]))
+      const degree = new Map<string, number>(nodes.map((n) => [n.id, 0]))
+
+      edges.forEach((e: any) => {
+        const s = typeof e.source === "object" ? e.source.id : e.source
+        const t = typeof e.target === "object" ? e.target.id : e.target
+        if (byId.has(s)) degree.set(s, (degree.get(s) ?? 0) + 1)
+        if (byId.has(t)) degree.set(t, (degree.get(t) ?? 0) + 1)
+      })
+
+      // Most connected
+      let most: InsightState["most"] = null
+      nodes.forEach((n) => {
+        const d = degree.get(n.id) ?? 0
+        if (!most || d > most.deg) most = { label: n.label || n.title || n.id, deg: d }
+      })
+
+      // Tally per topic
+      const tally: Record<string, { green: number; red: number; total: number }> = {}
+      const add = (topic: string, rel: "supports" | "contradicts") => {
+        tally[topic] ??= { green: 0, red: 0, total: 0 }
+        if (rel === "contradicts") tally[topic].red += 1
+        else tally[topic].green += 1
+        tally[topic].total += 1
+      }
+
+      edges.forEach((e: any) => {
+        const rel = getRelation(e)
+        const sId = typeof e.source === "object" ? e.source.id : e.source
+        const tId = typeof e.target === "object" ? e.target.id : e.target
+        const s = byId.get(sId),
+          t = byId.get(tId)
+        const st = normalizeTopic(s?.topic)
+        const tt = normalizeTopic(t?.topic)
+        if (st) add(st, rel)
+        if (tt) add(tt, rel)
+      })
+
+      let controversy: InsightState["controversy"] = null
+      let consensus: InsightState["consensus"] = null
+
+      // Primary: pick topics with enough edges (>=5), by share
+      for (const [topic, v] of Object.entries(tally)) {
+        if (v.total >= 5) {
+          const redShare = v.red / v.total
+          const greenShare = v.green / v.total
+          if (v.red > 0 && (!controversy || redShare > controversy.share)) {
+            controversy = { topic, share: redShare }
+          }
+          if (!consensus || greenShare > consensus.share) {
+            consensus = { topic, share: greenShare }
+          }
+        }
+      }
+
+      if (!controversy || !consensus) {
+        let g = 0,
+          r = 0
+        edges.forEach((e: any) => (getRelation(e) === "contradicts" ? r++ : g++))
+        const total = g + r
+        if (total > 0) {
+          const redShare = r / total
+          const greenShare = g / total
+          if (!controversy) controversy = { topic: "overall", share: redShare }
+          if (!consensus) consensus = { topic: "overall", share: greenShare }
+        }
+      }
+
+      const isolated = nodes.filter((n) => (degree.get(n.id) ?? 0) === 0).length
+      return { most, controversy, consensus, isolated }
+    }
+
+    const nextInsights = computeInsights(graphData.nodes, validEdges)
+    setInsights(nextInsights)
+
+    if (debug) {
+      const counts = validEdges.reduce(
+        (acc: any, e: any) => {
+          const r = getRelation(e)
+          acc[r] = (acc[r] ?? 0) + 1
+          return acc
+        },
+        {} as Record<string, number>,
+      )
+      console.debug("[graph] edges by relation:", counts)
+
+      // log a sample contradictory edge if any:
+      const contradictingEdge = validEdges.find((ed: any) => getRelation(ed) === "contradicts")
+      if (contradictingEdge) {
+        console.debug("[graph] sample contradicting edge", contradictingEdge)
+      }
+
+      const topics = Array.from(new Set(graphData.nodes.map((n) => n.topic || "none")))
+      const rels = Array.from(new Set(validEdges.map((e: any) => getRelation(e))))
+      console.debug("[graph]", {
+        nodes: graphData.nodes.length,
+        edges: validEdges.length,
+        topics,
+        rels,
+      })
+    }
 
     const simulation = d3
       .forceSimulation(graphData.nodes)
@@ -238,9 +334,9 @@ export default function GraphPage() {
       .selectAll("line")
       .data(validEdges)
       .join("line")
-      .attr("stroke", (d) => EDGE_COLOR(d.relation))
-      .attr("stroke-width", (d) => Math.max(1.5, (d.confidence || 0.5) * 3))
-      .attr("opacity", 0.6)
+      .style("stroke", (d: any) => EDGE_COLOR(d))
+      .style("stroke-width", (d: any) => Math.max(1.5, (d.confidence ?? d.weight ?? 0.5) * 3))
+      .style("opacity", 0.6)
 
     const node = g
       .append("g")
@@ -248,9 +344,10 @@ export default function GraphPage() {
       .data(graphData.nodes)
       .join("circle")
       .attr("r", 8)
-      .attr("fill", (d) => TOPIC_COLORS[d.topic?.toLowerCase() || ""] || DEFAULT_NODE)
-      .attr("stroke", "#fff")
-      .attr("stroke-width", 2)
+      .attr("data-topic", (d: any) => d.topic ?? "none")
+      .style("fill", (d: any) => TOPIC_COLORS[d.topic] ?? DEFAULT_NODE_COLOR)
+      .style("stroke", "#fff")
+      .style("stroke-width", 2)
       .style("cursor", "grab")
       .call(d3.drag<SVGCircleElement, Node>().on("start", dragstarted).on("drag", dragged).on("end", dragended))
 
@@ -314,7 +411,7 @@ export default function GraphPage() {
     return () => {
       simulation.stop()
     }
-  }, [graphData, selectedRelation])
+  }, [graphData, selectedRelation, debug])
 
   const handleZoomIn = () => {
     if (!svgRef.current || !zoomBehaviorRef.current) return
@@ -459,7 +556,6 @@ export default function GraphPage() {
       {!error && graphData && graphData.nodes.length > 0 && (
         <>
           <div className="flex flex-col lg:flex-row gap-6 mb-8">
-            {/* Main graph area */}
             <div className="flex-1">
               <div
                 ref={containerRef}
@@ -502,7 +598,6 @@ export default function GraphPage() {
             </div>
 
             <div className="lg:w-80 space-y-6">
-              {/* Graph Legend Card */}
               <div className="bg-white rounded-xl p-6 shadow-lg">
                 <h3 className="text-lg font-bold text-gray-900 mb-4">Graph Legend</h3>
                 <div className="space-y-4">
@@ -550,37 +645,36 @@ export default function GraphPage() {
                 </div>
               </div>
 
-              {/* Quick Insights Card */}
               <div className="bg-white rounded-xl p-6 shadow-lg">
                 <h3 className="text-lg font-bold text-gray-900 mb-4">Quick Insights</h3>
                 <div className="space-y-3">
                   <div className="py-2 border-b border-gray-100">
                     <span className="text-sm font-medium text-gray-700 block mb-1">Most connected study:</span>
                     <span className="text-sm text-gray-900">
-                      {insights.mostConnected
-                        ? `${insights.mostConnected.label} (${insights.mostConnected.degree} connections)`
-                        : "—"}
+                      {insights?.most ? `${insights.most.label} (${insights.most.deg} connections)` : "—"}
                     </span>
                   </div>
                   <div className="py-2 border-b border-gray-100">
                     <span className="text-sm font-medium text-gray-700 block mb-1">Biggest controversy:</span>
                     <span className="text-sm text-gray-900">
-                      {insights.biggestControversy
-                        ? `${insights.biggestControversy.topic} (${insights.biggestControversy.contradicts} contradicts)`
+                      {insights?.controversy
+                        ? `${insights.controversy.topic} (${Math.round(insights.controversy.share * 100)}% contradictions)`
                         : "—"}
                     </span>
                   </div>
                   <div className="py-2 border-b border-gray-100">
                     <span className="text-sm font-medium text-gray-700 block mb-1">Strongest consensus:</span>
                     <span className="text-sm text-gray-900">
-                      {insights.strongestConsensus
-                        ? `${insights.strongestConsensus.topic} (${Math.round(insights.strongestConsensus.ratio * 100)}%)`
+                      {insights?.consensus
+                        ? `${insights.consensus.topic} (${Math.round(insights.consensus.share * 100)}% supports)`
                         : "—"}
                     </span>
                   </div>
                   <div className="py-2">
                     <span className="text-sm font-medium text-gray-700 block mb-1">Isolated studies:</span>
-                    <span className="text-sm text-gray-900">{insights.isolatedCount}</span>
+                    <span className="text-sm text-gray-900">
+                      {typeof insights?.isolated === "number" ? insights.isolated : "—"}
+                    </span>
                   </div>
                 </div>
 
