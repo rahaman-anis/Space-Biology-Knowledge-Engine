@@ -27,22 +27,26 @@ export default function HeroSection() {
               Plan what's next.
             </h1>
 
-            <p className="text-lg md:text-xl text-gray-700 font-semibold mb-8 leading-relaxed">
+            <p className="text-lg md:text-xl text-gray-700 font-semibold mb-3 leading-relaxed">
               Evidence-driven decisions for Lunar, Mars, and ISS missions
             </p>
 
-            <div className="flex flex-wrap gap-4">
-              <div className="bg-white border-2 border-gray-200 rounded-xl px-6 py-4 shadow-sm hover:shadow-md transition-shadow">
-                <div className="text-3xl md:text-4xl font-black text-blue-600 mb-1">28,864</div>
-                <div className="text-sm md:text-base text-gray-700 font-semibold">Evidence Relations</div>
+            <p className="mt-3 text-base md:text-lg text-gray-600">
+              For mission planners, researchers, and research managers.
+            </p>
+
+            <div className="mt-6 grid grid-cols-1 sm:grid-cols-3 gap-4 max-w-3xl">
+              <div className="rounded-2xl border border-gray-200 bg-white p-5 flex flex-col items-center gap-1 text-center">
+                <div className="text-2xl md:text-3xl font-extrabold text-gray-900">28,864</div>
+                <div className="text-sm text-gray-600">Connections</div>
               </div>
-              <div className="bg-white border-2 border-gray-200 rounded-xl px-6 py-4 shadow-sm hover:shadow-md transition-shadow">
-                <div className="text-3xl md:text-4xl font-black text-blue-600 mb-1">173</div>
-                <div className="text-sm md:text-base text-gray-700 font-semibold">Critical Gaps</div>
+              <div className="rounded-2xl border border-gray-200 bg-white p-5 flex flex-col items-center gap-1 text-center">
+                <div className="text-2xl md:text-3xl font-extrabold text-gray-900">173</div>
+                <div className="text-sm text-gray-600">Gaps</div>
               </div>
-              <div className="bg-white border-2 border-gray-200 rounded-xl px-6 py-4 shadow-sm hover:shadow-md transition-shadow">
-                <div className="text-3xl md:text-4xl font-black text-blue-600 mb-1">572</div>
-                <div className="text-sm md:text-base text-gray-700 font-semibold">Publications</div>
+              <div className="rounded-2xl border border-gray-200 bg-white p-5 flex flex-col items-center gap-1 text-center">
+                <div className="text-2xl md:text-3xl font-extrabold text-gray-900">572</div>
+                <div className="text-sm text-gray-600">Studies</div>
               </div>
             </div>
           </div>

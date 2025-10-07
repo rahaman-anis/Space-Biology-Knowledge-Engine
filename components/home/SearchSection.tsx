@@ -34,36 +34,24 @@ export default function SearchSection() {
   }
 
   return (
-    <section className="py-12 md:py-16 bg-white">
+    <section className="py-12 md:py-16 bg-sky-50 border-t border-sky-100">
       <div className="max-w-4xl mx-auto px-4 sm:px-6 lg:px-8 text-center">
-        <div className="flex items-center justify-center gap-3 mb-4">
-          <h2 className="text-2xl sm:text-3xl md:text-4xl font-heading font-bold text-gray-900">
-            Ask ARIA anything about space biology evidence
-          </h2>
-          <div className="relative group">
-            <button className="w-6 h-6 rounded-full bg-gray-200 text-gray-600 flex items-center justify-center hover:bg-gray-300 transition-colors text-sm font-bold">
-              ?
-            </button>
-            <div className="absolute left-1/2 -translate-x-1/2 bottom-full mb-2 hidden group-hover:block w-72 bg-gray-900 text-white text-sm rounded-lg p-4 shadow-xl z-10">
-              <strong>ARIA</strong>: Artemis Research Intelligence Assistant
-              <br />
-              AI-powered 2-second search across 572 NASA studies with section-aware retrieval
-            </div>
-          </div>
-        </div>
+        <h2 className="text-2xl md:text-3xl font-heading font-bold text-gray-900 mb-3">
+          Ask ARIA anything about space biology evidence
+        </h2>
 
-        <p className="text-base md:text-lg text-gray-600 mb-8 leading-relaxed">
+        <p className="text-base md:text-lg text-gray-600 mb-6 leading-relaxed">
           Section-aware answers with citations, confidence and contradiction detection
         </p>
 
-        <form onSubmit={submit} className="relative mb-6">
+        <form onSubmit={submit} className="relative mb-4">
           <div className="relative">
             <MessageCircle className="absolute left-5 top-1/2 -translate-y-1/2 w-6 h-6 text-gray-400" />
             <input
               type="text"
               value={q}
               onChange={(e) => setQ(e.target.value)}
-              placeholder="What's the biggest risk for a 9-month Mars transit?"
+              placeholder="What countermeasures reduce bone loss during a 9-month transit?"
               className="w-full h-14 md:h-16 pl-14 pr-32 text-base rounded-full border-2 border-gray-300 focus:border-blue-600 focus:ring-4 focus:ring-blue-600/20 transition-all outline-none"
             />
             <button
@@ -96,6 +84,8 @@ export default function SearchSection() {
             </div>
           )}
         </form>
+
+        <p className="text-sm text-gray-500">Get evidence in seconds, not weeks. Try it now.</p>
       </div>
     </section>
   )

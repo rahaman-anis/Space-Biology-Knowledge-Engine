@@ -23,7 +23,7 @@ interface Edge {
 interface GraphData {
   nodes: Node[]
   edges: Edge[]
-  meta?: { count?: { nodes?: number; edges?: number } }
+  meta?: { count?: { nodes?: number; edges?: number }; reason?: string }
 }
 
 export default function GraphPage() {
@@ -45,8 +45,8 @@ export default function GraphPage() {
 
       try {
         const params = new URLSearchParams()
-        if (selectedTopic !== "all") params.append("topic", selectedTopic)
-        params.append("limit", String(limit))
+        if (selectedTopic !== "all") params.set("topic", selectedTopic.toLowerCase())
+        params.set("limit", "500")
 
         const res = await fetch(`/api/graph?${params}`)
 
@@ -55,6 +55,12 @@ export default function GraphPage() {
         }
 
         const json = await res.json()
+
+        if (json.meta?.reason === "no-edges") {
+          setError("No graph data available for this topic")
+          setGraphData(null)
+          return
+        }
 
         if (json.nodes?.length > 2000) {
           setError("Graph is too large. Try a narrower topic or reduce the limit.")
