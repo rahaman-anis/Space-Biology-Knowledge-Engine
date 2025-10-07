@@ -134,13 +134,9 @@ export function AnswerCard({ isStreaming, text, error }: AnswerCardProps) {
         </div>
       )}
 
-      {/* Disclaimer */}
       {!isStreaming && text && (
         <div className="pt-4 border-t-2 border-gray-200">
-          <p className="text-sm text-gray-600 italic flex items-center gap-2">
-            <span>⚠️</span>
-            <span>AI-generated summary. Verify with evidence below.</span>
-          </p>
+          <p className="text-sm text-gray-600">AI-generated summary. Verify with evidence below.</p>
         </div>
       )}
     </div>

@@ -28,13 +28,20 @@ function scoreEuclid(a: number[], b: number[]) {
 // Try multiple candidates so we work with either schema
 const PASSAGE_VIEW_CANDIDATES = [
   process.env.NEXT_PUBLIC_PASSAGE_EMBEDDINGS_VIEW, // preferred via env
-  "passage_embeddings", // old view name
-  "text_embeddings", // current table in your DB
+  "passage_embeddings",                          // old view name
+  "passage_embeddings_view",                     // sometimes used
+  "text_embeddings",                             // current table in your DB
 ].filter(Boolean) as string[]
 
 const DOCS_TABLE_CANDIDATES = [
   process.env.NEXT_PUBLIC_DOC_EMBEDDINGS_VIEW, // preferred via env
   "doc_embeddings", // typical table for doc vectors
+].filter(Boolean) as string[]
+
+const META_TABLE_CANDIDATES = [
+  process.env.NEXT_PUBLIC_DOCUMENTS_TABLE, // preferred via env
+  "documents",                             // current name in your DB
+  "doc_metadata_enriched",                 // legacy name some deployments use
 ].filter(Boolean) as string[]
 
 export async function GET() {
@@ -47,6 +54,7 @@ export async function GET() {
       vecDim: VEC_DIM,
       passageViewCandidates: PASSAGE_VIEW_CANDIDATES,
       docViewCandidates: DOCS_TABLE_CANDIDATES,
+      metaTableCandidates: META_TABLE_CANDIDATES,
     },
     hint: "POST a JSON body { query: string, k?: number, mode?: 'docs'|'passages'|'both', minScore?: number }",
   })
@@ -65,7 +73,7 @@ export async function POST(req: Request) {
       return NextResponse.json({ ok: false, error: "Invalid JSON body" }, { status: 400 })
     }
 
-    const { query, embedding, k = 8, mode = "both", minScore = 0 } = body
+    const { query, embedding, k = 8, mode = "both", minScore } = body
 
     console.log("[v0] Request params:", { query, hasEmbedding: !!embedding, k, mode, minScore })
 
@@ -157,13 +165,16 @@ export async function POST(req: Request) {
           console.log(`[v0] Docs view ${view} returned ${data.length} rows`)
           const scored = data
             .map((r: any) => {
-              const e: number[] = r.embedding || []
-              if (e.length !== VEC_DIM) return null
+              let e: any = r.embedding
+              if (typeof e === "string" && e.trim().startsWith("[")) {
+                try { e = JSON.parse(e) } catch {}
+              }
+              if (!Array.isArray(e) || e.length !== VEC_DIM) return null
               return {
                 pmcid: r.pmcid,
                 title: r.title ?? null,
                 year: r.year ?? null,
-                score: scoreEuclid(e, vec),
+                score: scoreEuclid(e as number[], vec),
               }
             })
             .filter(Boolean) as any[]
@@ -211,14 +222,17 @@ export async function POST(req: Request) {
 
           const rows = data
             .map((r: any) => {
-              const e: number[] = r.embedding || []
-              if (e.length !== VEC_DIM) return null
+              let e: any = r.embedding
+              if (typeof e === "string" && e.trim().startsWith("[")) {
+                try { e = JSON.parse(e) } catch {}
+              }
+              if (!Array.isArray(e) || e.length !== VEC_DIM) return null
               const txt = r.text ?? r.snippet ?? r.content ?? r.chunk ?? null
               return {
                 pmcid: r.pmcid,
                 section: r.section ?? "All",
                 text: txt,
-                score: scoreEuclid(e, vec),
+                score: scoreEuclid(e as number[], vec),
               }
             })
             .filter(Boolean) as any[]
@@ -250,12 +264,25 @@ export async function POST(req: Request) {
 
     const meta: Record<string, { title: string | null; year: string | number | null }> = {}
     if (pmcids.length) {
-      const { data, error } = await supabase.from("documents").select("pmcid,title,year").in("pmcid", pmcids)
-      if (error) {
-        console.error("[v0] Metadata fetch error:", error)
-      } else if (Array.isArray(data)) {
-        console.log(`[v0] Fetched metadata for ${data.length} documents`)
-        for (const r of data) meta[r.pmcid] = { title: r.title ?? null, year: r.year ?? null }
+      let metaFilled = false
+      for (const mt of META_TABLE_CANDIDATES) {
+        console.log(`[v0] Trying metadata table: ${mt}`)
+        const { data, error } = await supabase.from(mt).select("pmcid,title,year").in("pmcid", pmcids)
+        if (error) {
+          console.error(`[v0] Metadata fetch error from ${mt}:`, error)
+          continue
+        }
+        if (Array.isArray(data) && data.length) {
+          console.log(`[v0] Fetched metadata from ${mt} for ${data.length} documents`)
+          for (const r of data) meta[r.pmcid] = { title: r.title ?? null, year: r.year ?? null }
+          metaFilled = true
+          break
+        } else {
+          console.log(`[v0] Metadata table ${mt} returned no rows`)
+        }
+      }
+      if (!metaFilled) {
+        console.warn("[v0] No metadata fetched from any candidate table")
       }
     }
 
@@ -280,10 +307,11 @@ export async function POST(req: Request) {
         score: typeof d.score === "number" ? d.score : Number(d.score ?? 0) || 0,
       })
 
+    const hasMin = typeof minScore === "number" && Number.isFinite(minScore)
     const filtered = evidences
-      .filter((e) => !Number.isFinite(minScore) || (e.score ?? 0) >= (minScore as number))
-      .sort((a, b) => (b.score ?? 0) - (a.score ?? 0))
-      .slice(0, k)
+        .filter((e) => !hasMin || (e.score ?? 0) >= (minScore as number))
+        .sort((a, b) => (b.score ?? 0) - (a.score ?? 0))
+        .slice(0, k)
 
     console.log(`[v0] Filtered to ${filtered.length} evidences`)
 

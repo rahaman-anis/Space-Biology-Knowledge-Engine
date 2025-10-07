@@ -8,31 +8,28 @@ export function SectionBadge({ section }: { section: SectionType | string }) {
     Discussion: "bg-purple-100 text-purple-700 dark:bg-purple-900/30 dark:text-purple-400",
     Methods: "bg-orange-100 text-orange-700 dark:bg-orange-900/30 dark:text-orange-400",
     Introduction: "bg-green-100 text-green-700 dark:bg-green-900/30 dark:text-green-400",
+    All: "bg-gray-100 text-gray-700 dark:bg-gray-800 dark:text-gray-400",
   }
   const className = colors[section] || "bg-gray-100 text-gray-700 dark:bg-gray-800 dark:text-gray-400"
 
   return (
     <span className={`px-3 py-1 rounded-md text-sm font-bold ${className}`} data-testid="section-badge">
-      {section}
+      [{section}]
     </span>
   )
 }
 
 export function ConfidenceBadge({ confidence }: { confidence: Confidence | string }) {
-  const colors: Record<string, { bg: string; icon: string }> = {
-    High: { bg: "bg-green-100 text-green-700 dark:bg-green-900/30 dark:text-green-400", icon: "✓" },
-    Medium: { bg: "bg-orange-100 text-orange-700 dark:bg-orange-900/30 dark:text-orange-400", icon: "~" },
-    Low: { bg: "bg-gray-100 text-gray-700 dark:bg-gray-800 dark:text-gray-400", icon: "?" },
+  const colors: Record<string, string> = {
+    High: "bg-green-100 text-green-700 dark:bg-green-900/30 dark:text-green-400",
+    Medium: "bg-orange-100 text-orange-700 dark:bg-orange-900/30 dark:text-orange-400",
+    Low: "bg-gray-100 text-gray-700 dark:bg-gray-800 dark:text-gray-400",
   }
-  const config = colors[confidence] || colors.Low
+  const className = colors[confidence] || colors.Low
 
   return (
-    <span
-      className={`px-3 py-1 rounded-md text-sm font-bold ${config.bg} inline-flex items-center gap-1`}
-      data-testid="confidence-badge"
-    >
-      <span>{config.icon}</span>
-      <span>Confidence: {confidence}</span>
+    <span className={`px-3 py-1 rounded-md text-sm font-bold ${className}`} data-testid="confidence-badge">
+      Confidence: {confidence}
     </span>
   )
 }

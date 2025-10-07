@@ -33,18 +33,22 @@ export function EvidenceAccordion({ results }: Props) {
     )
   }
 
-  // Get a display title (fallback if "Untitled")
   const getDisplayTitle = (r: EvidenceRow): string => {
+    // If title exists and is not "Untitled", use it
     if (r.title && r.title !== "Untitled" && r.title.trim().length > 0) {
       return r.title
     }
-    // Fallback to first 80 chars of any available section text or generic title
+
+    // Fallback 1: Use first non-empty snippet from sections (truncate to 80 chars)
     const sections = r.sections || {}
-    const abstractText = sections.abstract || sections.introduction || sections.results || ""
-    if (abstractText.length > 80) {
-      return abstractText.slice(0, 80) + "..."
+    const allSectionTexts = Object.values(sections).filter(Boolean)
+    if (allSectionTexts.length > 0 && allSectionTexts[0].trim().length > 0) {
+      const firstSnippet = allSectionTexts[0].trim()
+      return firstSnippet.length > 80 ? firstSnippet.slice(0, 80) + "..." : firstSnippet
     }
-    return `Study on ${r.section}, ${r.year || "Unknown Year"}`
+
+    // Fallback 2: Generic title with PMCID
+    return `Study (${r.pmcid})`
   }
 
   return (
@@ -61,6 +65,9 @@ export function EvidenceAccordion({ results }: Props) {
           const sections = r.sections || {}
           const hasSections = Object.keys(sections).length > 0
 
+          const sectionOrder = ["results", "discussion", "introduction", "methods", "abstract"]
+          const availableSections = sectionOrder.filter((sec) => sections[sec as keyof typeof sections])
+
           return (
             <Accordion.Item
               key={`${r.pmcid}-${i}`}
@@ -68,9 +75,9 @@ export function EvidenceAccordion({ results }: Props) {
               className="bg-white rounded-xl border-2 border-gray-200 overflow-hidden transition-all hover:shadow-md"
             >
               <Accordion.Header>
-                <Accordion.Trigger className="w-full p-6 text-left focus:outline-none focus:ring-2 focus:ring-blue-500 focus:ring-inset group">
+                <Accordion.Trigger className="w-full p-5 text-left focus:outline-none focus:ring-2 focus:ring-blue-500 focus:ring-inset group">
                   <div className="flex items-start justify-between gap-4 mb-3">
-                    <h3 className="text-xl font-bold text-gray-900 flex-1">{shortTitle}</h3>
+                    <h3 className="text-[20px] font-bold text-gray-900 flex-1">{shortTitle}</h3>
                     <Link
                       href={pmcUrl(r.pmcid)}
                       target="_blank"
@@ -90,13 +97,9 @@ export function EvidenceAccordion({ results }: Props) {
                     {r.year && (
                       <span className="px-3 py-1 rounded-md text-sm font-bold bg-gray-100 text-gray-700">{r.year}</span>
                     )}
-                    {r.citations && (
-                      <span className="px-3 py-1 rounded-md text-sm font-bold bg-gray-100 text-gray-700">
-                        Cited by {r.citations}
-                      </span>
-                    )}
                   </div>
 
+                  {/* Relevance bar */}
                   <div className="mb-3">
                     <ProgressBar value={r.relevance} label="Relevance" />
                   </div>
@@ -104,45 +107,46 @@ export function EvidenceAccordion({ results }: Props) {
                   <div className="flex items-center justify-end text-sm text-gray-600 group-data-[state=open]:hidden">
                     <span className="flex items-center gap-1">
                       <ChevronDown className="w-4 h-4" />
-                      Expand ▼
+                      Expand
                     </span>
                   </div>
                 </Accordion.Trigger>
               </Accordion.Header>
 
               <Accordion.Content className="overflow-hidden data-[state=open]:animate-accordion-down data-[state=closed]:animate-accordion-up">
-                <div className="px-6 pb-6 space-y-4 border-t border-gray-200 pt-4">
-                  {/* Full title */}
-                  <div>
-                    <h4 className="text-2xl font-bold text-gray-900 mb-3">{displayTitle}</h4>
-                    <div className="flex flex-wrap gap-2 items-center text-sm text-gray-600">
-                      <SectionBadge section={r.section} />
-                      <ConfidenceBadge confidence={r.confidence} />
-                      {r.year && <span>• {r.year}</span>}
-                      {r.citations && <span>• Cited by {r.citations}</span>}
-                      <span>• Relevance {Math.round(r.relevance * 100)}%</span>
-                    </div>
+                <div className="px-5 pb-6 space-y-4 border-t border-gray-200 pt-4">
+                  {/* Compact header line */}
+                  <div className="flex items-center justify-between">
+                    <h4 className="text-lg font-bold text-gray-900">{displayTitle}</h4>
+                    <Link
+                      href={pmcUrl(r.pmcid)}
+                      target="_blank"
+                      rel="noopener noreferrer"
+                      className="flex items-center gap-2 text-blue-600 hover:underline text-sm font-bold whitespace-nowrap"
+                    >
+                      {r.pmcid}
+                      <ExternalLink className="w-4 h-4" />
+                    </Link>
                   </div>
 
                   <div className="h-px bg-gray-200" />
 
-                  {/* Section Excerpts */}
-                  {hasSections ? (
+                  {hasSections && availableSections.length > 0 ? (
                     <div>
-                      <h5 className="text-lg font-bold text-gray-900 mb-3 flex items-center gap-2">
+                      <h5 className="text-[18px] font-bold text-gray-900 mb-3 flex items-center gap-2">
                         <FileText className="w-5 h-5" />
                         SECTION EXCERPTS
                       </h5>
                       <div className="space-y-4">
-                        {Object.entries(sections).map(([sec, txt]) => {
+                        {availableSections.slice(0, 3).map((sec) => {
                           const sectionName = sec.charAt(0).toUpperCase() + sec.slice(1)
+                          const txt = sections[sec as keyof typeof sections] || ""
                           const isPrimary = sec === r.primary_section
-                          const displayText = txt || "Excerpt not available for this section"
 
                           return (
-                            <div key={sec} className="bg-gray-50 rounded-lg p-4 border border-gray-200">
+                            <div key={sec} className="bg-gray-50 rounded-lg p-4 md:p-5 border border-gray-200">
                               <div className="flex items-center justify-between mb-2">
-                                <h6 className="font-bold text-base text-gray-900 flex items-center gap-2">
+                                <h6 className="text-base font-semibold text-gray-900 flex items-center gap-2">
                                   [{sectionName}]
                                   {isPrimary && <span className="text-sm text-blue-600">⭐ Primary Evidence</span>}
                                 </h6>
@@ -162,7 +166,13 @@ export function EvidenceAccordion({ results }: Props) {
                                   </Dialog>
                                 )}
                               </div>
-                              <p className="text-base text-gray-700 leading-relaxed">{displayText}</p>
+                              <p
+                                className={`leading-relaxed ${
+                                  sec === "results" ? "text-[16px] text-gray-900" : "text-[16px] text-gray-700"
+                                }`}
+                              >
+                                {txt || "Excerpt not available for this section."}
+                              </p>
                             </div>
                           )
                         })}
@@ -170,9 +180,7 @@ export function EvidenceAccordion({ results }: Props) {
                     </div>
                   ) : (
                     <div className="bg-gray-50 rounded-lg p-4 border border-gray-200">
-                      <p className="text-base text-gray-700">
-                        Section details not available. View the full paper for complete information.
-                      </p>
+                      <p className="text-base text-gray-700 italic">Excerpt not available for this section.</p>
                     </div>
                   )}
 
@@ -195,19 +203,13 @@ export function EvidenceAccordion({ results }: Props) {
                     >
                       View Full Paper
                     </Link>
-                    <button className="px-6 py-3 bg-gray-200 text-gray-900 rounded-lg text-base font-bold hover:bg-gray-300 transition-colors">
-                      Add to Brief
-                    </button>
-                    <button className="px-6 py-3 bg-gray-200 text-gray-900 rounded-lg text-base font-bold hover:bg-gray-300 transition-colors">
-                      Find Related
-                    </button>
                   </div>
 
                   {/* Collapse indicator */}
                   <div className="flex items-center justify-center pt-2">
                     <span className="text-sm text-gray-600 flex items-center gap-1">
                       <ChevronUp className="w-4 h-4" />
-                      Collapse ▲
+                      Collapse
                     </span>
                   </div>
                 </div>
