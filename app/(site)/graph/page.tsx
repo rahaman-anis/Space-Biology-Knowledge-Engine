@@ -26,6 +26,24 @@ interface GraphData {
   meta?: { count?: { nodes?: number; edges?: number }; reason?: string }
 }
 
+const TOPIC_COLORS: Record<string, string> = {
+  bone: "#EAB308", // yellow
+  immune: "#3B82F6", // blue
+  radiation: "#EF4444", // red
+  muscle: "#10B981", // green
+  cardiovascular: "#EC4899", // pink
+}
+const DEFAULT_NODE = "#6B7280" // gray for unknown
+
+type Insights = {
+  mostConnected?: { id: string; label: string; degree: number }
+  biggestControversy?: { topic: string; contradicts: number }
+  strongestConsensus?: { topic: string; ratio: number; supports: number; total: number }
+  isolatedCount: number
+}
+
+const EDGE_COLOR = (rel?: string) => (rel === "contradicts" ? "#DC2626" : "#16A34A")
+
 export default function GraphPage() {
   const svgRef = useRef<SVGSVGElement>(null)
   const containerRef = useRef<HTMLDivElement>(null)
@@ -37,6 +55,9 @@ export default function GraphPage() {
   const [selectedTopic, setSelectedTopic] = useState<string>("all")
   const [selectedRelation, setSelectedRelation] = useState<string>("all")
   const [limit, setLimit] = useState(200)
+  const [insights, setInsights] = useState<Insights>({ isolatedCount: 0 })
+
+  const debug = typeof window !== "undefined" && new URLSearchParams(window.location.search).get("debug") === "1"
 
   useEffect(() => {
     const fetchGraph = async () => {
@@ -112,6 +133,93 @@ export default function GraphPage() {
       return nodeMap.has(sourceId) && nodeMap.has(targetId)
     })
 
+    const computeInsights = (): Insights => {
+      // Build degree map
+      const degreeMap = new Map<string, number>()
+      graphData.nodes.forEach((n) => degreeMap.set(n.id, 0))
+
+      validEdges.forEach((e) => {
+        const sourceId = typeof e.source === "string" ? e.source : e.source.id
+        const targetId = typeof e.target === "string" ? e.target : e.target.id
+        degreeMap.set(sourceId, (degreeMap.get(sourceId) || 0) + 1)
+        degreeMap.set(targetId, (degreeMap.get(targetId) || 0) + 1)
+      })
+
+      // Most connected study
+      let mostConnected: Insights["mostConnected"] = undefined
+      let maxDegree = 0
+      graphData.nodes.forEach((n) => {
+        const degree = degreeMap.get(n.id) || 0
+        if (degree > maxDegree) {
+          maxDegree = degree
+          mostConnected = { id: n.id, label: n.label.slice(0, 40), degree }
+        }
+      })
+
+      // Topic-based metrics
+      const topicStats = new Map<string, { supports: number; contradicts: number }>()
+
+      validEdges.forEach((e) => {
+        const sourceNode = nodeMap.get(typeof e.source === "string" ? e.source : e.source.id)
+        const targetNode = nodeMap.get(typeof e.target === "string" ? e.target : e.target.id)
+
+        // Count edge for source node's topic
+        if (sourceNode?.topic) {
+          const topic = sourceNode.topic.toLowerCase()
+          if (!topicStats.has(topic)) {
+            topicStats.set(topic, { supports: 0, contradicts: 0 })
+          }
+          const stats = topicStats.get(topic)!
+          if (e.relation === "supports") stats.supports++
+          else if (e.relation === "contradicts") stats.contradicts++
+        }
+
+        // Count edge for target node's topic
+        if (targetNode?.topic && targetNode.topic !== sourceNode?.topic) {
+          const topic = targetNode.topic.toLowerCase()
+          if (!topicStats.has(topic)) {
+            topicStats.set(topic, { supports: 0, contradicts: 0 })
+          }
+          const stats = topicStats.get(topic)!
+          if (e.relation === "supports") stats.supports++
+          else if (e.relation === "contradicts") stats.contradicts++
+        }
+      })
+
+      let biggestControversy: Insights["biggestControversy"] = undefined
+      let maxRedShare = 0
+      topicStats.forEach((stats, topic) => {
+        const total = stats.supports + stats.contradicts
+        if (total > 0) {
+          const redShare = stats.contradicts / total
+          if (redShare > maxRedShare) {
+            maxRedShare = redShare
+            biggestControversy = { topic, contradicts: stats.contradicts }
+          }
+        }
+      })
+
+      // Strongest consensus (highest ratio, min 10 total edges)
+      let strongestConsensus: Insights["strongestConsensus"] = undefined
+      let maxRatio = 0
+      topicStats.forEach((stats, topic) => {
+        const total = stats.supports + stats.contradicts
+        if (total >= 10) {
+          const ratio = stats.supports / total
+          if (ratio > maxRatio) {
+            maxRatio = ratio
+            strongestConsensus = { topic, ratio, supports: stats.supports, total }
+          }
+        }
+      })
+
+      const isolatedCount = Array.from(degreeMap.values()).filter((d) => d === 0).length
+
+      return { mostConnected, biggestControversy, strongestConsensus, isolatedCount }
+    }
+
+    setInsights(computeInsights())
+
     const simulation = d3
       .forceSimulation(graphData.nodes)
       .force(
@@ -130,8 +238,8 @@ export default function GraphPage() {
       .selectAll("line")
       .data(validEdges)
       .join("line")
-      .attr("stroke", (d) => (d.relation === "supports" ? "#16A34A" : "#DC2626"))
-      .attr("stroke-width", (d) => (d.confidence || 0.5) * 3)
+      .attr("stroke", (d) => EDGE_COLOR(d.relation))
+      .attr("stroke-width", (d) => Math.max(1.5, (d.confidence || 0.5) * 3))
       .attr("opacity", 0.6)
 
     const node = g
@@ -139,17 +247,8 @@ export default function GraphPage() {
       .selectAll("circle")
       .data(graphData.nodes)
       .join("circle")
-      .attr("r", (d) => Math.sqrt(d.type.length)) // Node size based on number of connections
-      .attr("fill", (d) => {
-        const colors: Record<string, string> = {
-          bone: "#EAB308",
-          immune: "#3B82F6",
-          radiation: "#EF4444",
-          muscle: "#10B981",
-          cardiovascular: "#F43F5E",
-        }
-        return colors[d.topic || ""] || "#6B7280"
-      })
+      .attr("r", 8)
+      .attr("fill", (d) => TOPIC_COLORS[d.topic?.toLowerCase() || ""] || DEFAULT_NODE)
       .attr("stroke", "#fff")
       .attr("stroke-width", 2)
       .style("cursor", "grab")
@@ -411,11 +510,11 @@ export default function GraphPage() {
                     <h4 className="text-sm font-semibold text-gray-700 mb-2">Relations</h4>
                     <div className="space-y-2">
                       <div className="flex items-center gap-2">
-                        <div className="w-8 h-1 bg-green-600"></div>
+                        <div className="w-8 h-1" style={{ backgroundColor: "#16A34A" }}></div>
                         <span className="text-sm text-gray-700">Supports</span>
                       </div>
                       <div className="flex items-center gap-2">
-                        <div className="w-8 h-1 bg-red-600"></div>
+                        <div className="w-8 h-1" style={{ backgroundColor: "#DC2626" }}></div>
                         <span className="text-sm text-gray-700">Contradicts</span>
                       </div>
                     </div>
@@ -424,23 +523,26 @@ export default function GraphPage() {
                     <h4 className="text-sm font-semibold text-gray-700 mb-2">Topics</h4>
                     <div className="space-y-2">
                       <div className="flex items-center gap-2">
-                        <div className="w-4 h-4 rounded-full bg-yellow-500"></div>
+                        <div className="w-4 h-4 rounded-full" style={{ backgroundColor: TOPIC_COLORS.bone }}></div>
                         <span className="text-sm text-gray-700">Bone</span>
                       </div>
                       <div className="flex items-center gap-2">
-                        <div className="w-4 h-4 rounded-full bg-blue-500"></div>
+                        <div className="w-4 h-4 rounded-full" style={{ backgroundColor: TOPIC_COLORS.immune }}></div>
                         <span className="text-sm text-gray-700">Immune</span>
                       </div>
                       <div className="flex items-center gap-2">
-                        <div className="w-4 h-4 rounded-full bg-red-500"></div>
+                        <div className="w-4 h-4 rounded-full" style={{ backgroundColor: TOPIC_COLORS.radiation }}></div>
                         <span className="text-sm text-gray-700">Radiation</span>
                       </div>
                       <div className="flex items-center gap-2">
-                        <div className="w-4 h-4 rounded-full bg-green-500"></div>
+                        <div className="w-4 h-4 rounded-full" style={{ backgroundColor: TOPIC_COLORS.muscle }}></div>
                         <span className="text-sm text-gray-700">Muscle</span>
                       </div>
                       <div className="flex items-center gap-2">
-                        <div className="w-4 h-4 rounded-full bg-pink-500"></div>
+                        <div
+                          className="w-4 h-4 rounded-full"
+                          style={{ backgroundColor: TOPIC_COLORS.cardiovascular }}
+                        ></div>
                         <span className="text-sm text-gray-700">Cardiovascular</span>
                       </div>
                     </div>
@@ -452,23 +554,41 @@ export default function GraphPage() {
               <div className="bg-white rounded-xl p-6 shadow-lg">
                 <h3 className="text-lg font-bold text-gray-900 mb-4">Quick Insights</h3>
                 <div className="space-y-3">
-                  <div className="flex justify-between items-center py-2 border-b border-gray-100">
-                    <span className="text-sm font-medium text-gray-700">Most connected study:</span>
-                    <span className="text-sm text-gray-500">—</span>
+                  <div className="py-2 border-b border-gray-100">
+                    <span className="text-sm font-medium text-gray-700 block mb-1">Most connected study:</span>
+                    <span className="text-sm text-gray-900">
+                      {insights.mostConnected
+                        ? `${insights.mostConnected.label} (${insights.mostConnected.degree} connections)`
+                        : "—"}
+                    </span>
                   </div>
-                  <div className="flex justify-between items-center py-2 border-b border-gray-100">
-                    <span className="text-sm font-medium text-gray-700">Biggest controversy:</span>
-                    <span className="text-sm text-gray-500">—</span>
+                  <div className="py-2 border-b border-gray-100">
+                    <span className="text-sm font-medium text-gray-700 block mb-1">Biggest controversy:</span>
+                    <span className="text-sm text-gray-900">
+                      {insights.biggestControversy
+                        ? `${insights.biggestControversy.topic} (${insights.biggestControversy.contradicts} contradicts)`
+                        : "—"}
+                    </span>
                   </div>
-                  <div className="flex justify-between items-center py-2 border-b border-gray-100">
-                    <span className="text-sm font-medium text-gray-700">Strongest consensus:</span>
-                    <span className="text-sm text-gray-500">—</span>
+                  <div className="py-2 border-b border-gray-100">
+                    <span className="text-sm font-medium text-gray-700 block mb-1">Strongest consensus:</span>
+                    <span className="text-sm text-gray-900">
+                      {insights.strongestConsensus
+                        ? `${insights.strongestConsensus.topic} (${Math.round(insights.strongestConsensus.ratio * 100)}%)`
+                        : "—"}
+                    </span>
                   </div>
-                  <div className="flex justify-between items-center py-2">
-                    <span className="text-sm font-medium text-gray-700">Isolated studies:</span>
-                    <span className="text-sm text-gray-500">—</span>
+                  <div className="py-2">
+                    <span className="text-sm font-medium text-gray-700 block mb-1">Isolated studies:</span>
+                    <span className="text-sm text-gray-900">{insights.isolatedCount}</span>
                   </div>
                 </div>
+
+                {debug && (
+                  <pre className="mt-4 text-xs text-gray-500 bg-gray-50 p-3 rounded overflow-auto max-h-64">
+                    {JSON.stringify(insights, null, 2)}
+                  </pre>
+                )}
               </div>
             </div>
           </div>
