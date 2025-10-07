@@ -4,52 +4,81 @@ import { NextResponse } from "next/server"
 import { createClient } from "@supabase/supabase-js"
 
 function getServerSupabase() {
-  const url = process.env.NEXT_PUBLIC_SUPABASE_URL!
-  const anon = process.env.NEXT_PUBLIC_SUPABASE_ANON_KEY!
-  if (!url || !anon) throw new Error("Supabase envs missing")
-  return createClient(url, anon, { auth: { persistSession: false } })
+  const url = process.env.NEXT_PUBLIC_SUPABASE_URL
+  const service = process.env.SUPABASE_SERVICE_KEY
+  const anon = process.env.NEXT_PUBLIC_SUPABASE_ANON_KEY
+
+  if (!url || (!service && !anon)) {
+    return null
+  }
+
+  return createClient(url, service || anon!, { auth: { persistSession: false } })
 }
 
 export async function GET(req: Request) {
   try {
     const { searchParams } = new URL(req.url)
-    const rawTopic = (searchParams.get("topic") || "all").toLowerCase().trim()
     const limit = Math.max(50, Math.min(Number(searchParams.get("limit") || "500"), 1000))
-    const topic = rawTopic === "" ? "all" : rawTopic
 
     const supabase = getServerSupabase()
 
-    let q = supabase.from("graph_edges_v").select("source, target, relation, predicate, confidence, topic").limit(limit)
+    if (!supabase) {
+      return NextResponse.json({
+        nodes: [],
+        edges: [],
+        meta: { reason: "missing-envs", details: "Supabase environment variables not configured" },
+      })
+    }
 
-    if (topic !== "all") q = q.eq("topic", topic)
+    const { data: edges, error: e1 } = await supabase
+      .from("graph_edges_v")
+      .select("source, target, relation")
+      .limit(limit)
 
-    const { data: edges, error: e1 } = await q
-    if (e1) throw e1
+    if (e1) {
+      return NextResponse.json({
+        nodes: [],
+        edges: [],
+        meta: { reason: "supabase-error", details: e1.message },
+      })
+    }
 
     if (!edges || edges.length === 0) {
       return NextResponse.json({
         nodes: [],
         edges: [],
-        meta: { topic, limit, reason: "no-edges", count: { nodes: 0, edges: 0 } },
+        meta: { limit, reason: "no-edges", count: { nodes: 0, edges: 0 } },
       })
     }
 
     const nodeIds = Array.from(new Set(edges.flatMap((e) => [e.source, e.target])))
 
-    const { data: nodes, error: e2 } = await supabase
-      .from("graph_nodes_v")
-      .select("id, label, type, topic")
-      .in("id", nodeIds)
+    const { data: rawNodes, error: e2 } = await supabase.from("graph_nodes_v").select("id, label").in("id", nodeIds)
 
-    if (e2) throw e2
+    if (e2) {
+      return NextResponse.json({
+        nodes: [],
+        edges: [],
+        meta: { reason: "supabase-error", details: e2.message },
+      })
+    }
+
+    const nodes = (rawNodes || []).map((n: any) => ({
+      ...n,
+      type: n.type || "node",
+    }))
 
     return NextResponse.json({
-      nodes: nodes || [],
+      nodes,
       edges,
-      meta: { topic, limit, count: { nodes: nodes?.length || 0, edges: edges.length } },
+      meta: { limit, count: { nodes: nodes.length, edges: edges.length } },
     })
   } catch (err: any) {
     console.error("[api/graph] Error:", err)
-    return NextResponse.json({ error: String(err?.message || err), meta: { route: "/api/graph" } }, { status: 500 })
+    return NextResponse.json({
+      nodes: [],
+      edges: [],
+      meta: { reason: "supabase-error", details: String(err?.message || err) },
+    })
   }
 }
