@@ -16,9 +16,19 @@ const overpass = Overpass({
 })
 
 export const metadata: Metadata = {
-  title: "Space Biology Knowledge Engine",
-  description: "Evidence-driven decision support for Moon/Mars missions",
+  title: "LifeLens: Space Biology Evidence Synthesis Engine",
+  description:
+    "AI-powered search across 572 space biology papers. Get evidence-backed answers, identify research gaps, and visualize study relations for mission planning.",
   generator: "v0.app",
+  metadataBase: new URL("https://www.spacebioengine.study"),
+  openGraph: {
+    title: "LifeLens: Space Biology Knowledge Engine",
+    description: "AI-powered evidence synthesis across 572 NASA space biology papers for mission planning",
+    url: "https://www.spacebioengine.study",
+    type: "website",
+    images: ["/og-image.jpg"],
+  },
+  icons: { icon: "/favicon.ico" },
 }
 
 export default function RootLayout({ children }: { children: React.ReactNode }) {
