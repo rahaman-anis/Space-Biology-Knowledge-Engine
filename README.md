@@ -49,10 +49,10 @@ docs/…          # ops/design/api/security docs
 
 ## Deployment
 
-Vercel (recommended). Ensure env vars set in Project → Settings → Environment Variables.
+Ensure env vars set in Project → Settings → Environment Variables.
 
 See `docs/OPERATIONS.md` for runbook, key rotation, and smoke tests.
 
 ## Licence
 
-MIT (or update to your preferred licence).
+MIT.
