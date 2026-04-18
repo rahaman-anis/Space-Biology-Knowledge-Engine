@@ -211,3 +211,4 @@ scripts/        data and processing scripts
 docs/           project and architecture notes
 public/         static assets
 types/          shared TypeScript types
+
