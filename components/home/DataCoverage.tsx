@@ -2,7 +2,7 @@ export default function DataCoverage() {
   const items = [
     { label: "Publications", value: "572", icon: "📚" },
     { label: "OSDR Links", value: "245", icon: "🧬" },
-    { label: "Claims Extracted", value: "2,847", icon: "📊" },
+    { label: "Claims Extracted", value: "1,092", icon: "📊" },
     { label: "GeneLab Datasets", value: "156", icon: "🔬" },
     { label: "Evidence Relations", value: "28,864", icon: "🔗" },
     { label: "Research Gaps", value: "173", icon: "❓" },
