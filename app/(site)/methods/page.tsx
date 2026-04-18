@@ -21,19 +21,15 @@ export default function MethodsPage() {
         <div className="bg-gray-50 rounded-xl p-8">
           <ul className="list-disc pl-6 space-y-2 text-gray-800 leading-relaxed">
             <li className="font-normal">
-              572 peer-reviewed publications from NASA spaceflight studies aggregated from OSDR, PSI, GeneLab, and
-              PubMed Central
+              572 peer-reviewed publications from NASA spaceflight studies aggregated from OSDR, PSI, GeneLab, Task Book, and PubMed Central
             </li>
             <li className="font-normal">
-              245 OSDR dataset cross-references linking publications to raw experimental data
+              245 OSDR dataset cross-references linking publications to related experimental data
             </li>
             <li className="font-normal">156 GeneLab datasets with genomic and transcriptomic profiles</li>
-            <li className="font-normal">87 Task Book entries tracking ongoing research projects</li>
+            <li className="font-normal">87 Task Book entries linked to related research activity</li>
             <li className="font-normal">
-              Full-text XML articles parsed from NASA repositories and open science databases
-            </li>
-            <li className="font-normal">
-              Metadata extraction includes authors, publication dates, funding sources, and experimental conditions
+              Full-text XML articles parsed from open repositories where available
             </li>
           </ul>
         </div>
@@ -48,20 +44,19 @@ export default function MethodsPage() {
               Section-level parsing using IMRaD structure (Introduction, Methods, Results, Discussion)
             </li>
             <li className="font-normal">
-              2,165 evidence spans extracted and tagged: Abstract (702), Results (386), Methods (385), Discussion (276),
-              Introduction (218), Conclusion (198)
+              2,165 section-level evidence spans extracted and tagged by section type
             </li>
             <li className="font-normal">
-              Section-aware retrieval where Results sections are prioritized for factual claims
+              Section-aware retrieval where Results sections are prioritised for factual claims
             </li>
             <li className="font-normal">
-              Semantic embeddings generated for each evidence span to enable similarity search
+              Semantic embeddings generated for evidence spans to support similarity search
             </li>
             <li className="font-normal">
-              Entity extraction identifies biological systems, experimental conditions, and measured outcomes
+              Structured claim extraction from scientific text
             </li>
             <li className="font-normal">
-              Automated classification of evidence type (observational, experimental, review, meta-analysis)
+              Discussion-section mining to identify explicit research gaps
             </li>
           </ul>
         </div>
@@ -73,19 +68,17 @@ export default function MethodsPage() {
         <div className="bg-gray-50 rounded-xl p-8">
           <ul className="list-disc pl-6 space-y-2 text-gray-800 leading-relaxed">
             <li className="font-normal">
-              28,864 evidence relations (supports/contradicts) extracted using natural language processing
-            </li>
-            <li className="font-normal">Graph structure maps agreement and disagreement across studies</li>
-            <li className="font-normal">
-              Node types include publications, biological systems, experimental conditions, and findings
+              1,092 structured claims extracted from the corpus
             </li>
             <li className="font-normal">
-              Edge types capture relationships: supports, contradicts, extends, replicates, reviews
+              28,864 evidence relations mapped across the literature
             </li>
             <li className="font-normal">
-              Citation network analysis identifies influential studies and research clusters
+              Support and contradiction links used to surface consensus and contested findings
             </li>
-            <li className="font-normal">Temporal tracking shows how consensus evolves over time</li>
+            <li className="font-normal">
+              Graph views help users explore relationships across topics, organisms, and mission contexts
+            </li>
           </ul>
         </div>
       </section>
@@ -96,18 +89,16 @@ export default function MethodsPage() {
         <div className="bg-white border-2 border-gray-200 rounded-xl p-8">
           <ul className="list-disc pl-6 space-y-2 text-gray-800 leading-relaxed">
             <li className="font-normal">
-              Coverage analysis identifies under-studied biological systems and experimental conditions
-            </li>
-            <li className="font-normal">Contradiction detection flags conflicting findings that require resolution</li>
-            <li className="font-normal">
-              Mission-critical gaps prioritized based on relevance to lunar, Mars, and ISS operations
+              173 research gaps identified from Discussion sections and corpus coverage analysis
             </li>
             <li className="font-normal">
-              Statistical power analysis identifies areas where more replication is needed
+              Gaps classified by topic and organism type
             </li>
-            <li className="font-normal">Temporal gap analysis shows where recent research is lacking</li>
             <li className="font-normal">
-              Cross-system gap detection identifies biological interactions that remain unexplored
+              Priority and severity signals used to highlight mission-relevant unknowns
+            </li>
+            <li className="font-normal">
+              Mission-specific views surface gaps relevant to Lunar, Mars, and ISS scenarios
             </li>
           </ul>
         </div>
@@ -118,17 +109,20 @@ export default function MethodsPage() {
         <h2 className="text-3xl font-bold text-gray-900 mb-6">QUALITY ASSURANCE & VALIDATION</h2>
         <div className="bg-gray-50 rounded-xl p-8">
           <ul className="list-disc pl-6 space-y-2 text-gray-800 leading-relaxed">
-            <li className="font-normal">Automated section classification with manual validation for edge cases</li>
-            <li className="font-normal">Citation tracking across the corpus to identify consensus and outliers</li>
-            <li className="font-normal">Contradiction detection flags conflicting findings for expert review</li>
             <li className="font-normal">
-              Source reliability scoring based on journal impact factor, citation count, and peer review status
+              Section classification manually validated on a sample set
             </li>
             <li className="font-normal">
-              Confidence scores assigned to each finding based on evidence strength and replication
+              Claim extraction reviewed with biology SME input
             </li>
             <li className="font-normal">
-              Regular audits of extraction accuracy and relation classification performance
+              Gap outputs spot-checked against known NASA literature patterns
+            </li>
+            <li className="font-normal">
+              Traceable citations link findings back to source publications
+            </li>
+            <li className="font-normal">
+              Confidence scoring combines study count, section quality, recency, and source signals
             </li>
           </ul>
         </div>
@@ -140,19 +134,17 @@ export default function MethodsPage() {
         <div className="bg-white border-2 border-gray-200 rounded-xl p-8">
           <ul className="list-disc pl-6 space-y-2 text-gray-800 leading-relaxed">
             <li className="font-normal">
-              Mission-specific filtering enables targeted evidence retrieval for lunar, Mars, and ISS scenarios
+              Mission-specific filtering supports evidence retrieval for Lunar, Mars, and ISS scenarios
             </li>
             <li className="font-normal">
-              Risk assessment support by identifying known hazards and mitigation strategies
+              Risk assessment support by surfacing known hazards, evidence gaps, and contradictions
             </li>
             <li className="font-normal">
               Countermeasure evaluation through evidence synthesis across multiple studies
             </li>
             <li className="font-normal">
-              Timeline-aware recommendations based on mission phase (pre-flight, in-flight, post-flight)
+              Topic views support exploration of bone, immune, radiation, muscle, and cardiovascular effects
             </li>
-            <li className="font-normal">Integration with NASA mission planning tools and decision support systems</li>
-            <li className="font-normal">Automated briefing generation for mission planners and flight surgeons</li>
           </ul>
         </div>
       </section>
@@ -161,9 +153,7 @@ export default function MethodsPage() {
       <section>
         <h2 className="text-3xl font-bold text-gray-900 mb-6">Open Science</h2>
         <p className="text-base text-gray-800">
-          This project follows open science principles. Our methodology is fully documented, and we plan to release
-          processed datasets and analysis code under open licenses to enable reproducibility and community
-          contributions.
+          This project follows open science principles. The methodology is documented, and future work includes expanding the corpus, improving reproducibility, and releasing more of the processing workflow.
         </p>
       </section>
     </div>
