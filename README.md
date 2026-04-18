@@ -6,6 +6,33 @@ It transforms a fragmented corpus of research papers, datasets, and project reco
 
 **Live demo:** https://www.spacebioengine.study/
 
+## Screenshots
+
+### Homepage
+![LifeLens homepage](docs/images/lifelens-homepage.png)
+
+*Homepage showing the product entry point, mission-focused positioning, and headline evidence metrics.*
+
+### Evidence corpus
+![LifeLens evidence corpus](docs/images/lifelens-evidence-corpus.png)
+
+*Corpus overview showing publication coverage, linked NASA datasets, extracted claims, and mapped evidence relations.*
+
+### Evidence detail
+![LifeLens evidence detail](docs/images/lifelens-evidence-detail.png)
+
+*Topic-specific evidence view with section tags, confidence labels, and traceable source links.*
+
+### Gap analysis
+![LifeLens gap heatmap](docs/images/lifelens-gap-heatmap.png)
+
+*Gap distribution heatmap showing research gaps by biological system and mission phase.*
+
+### Knowledge graph
+![LifeLens knowledge graph](docs/images/lifelens-knowledge-graph.png)
+
+*Interactive evidence graph showing support and contradiction relationships across the literature.*
+
 ## Why this project exists
 
 NASA space biology research spans bone loss, immune function, radiation response, muscle atrophy, and cardiovascular effects across ISS, Shuttle, and analogue missions. Although much of this research is publicly available, it remains difficult to synthesise quickly and consistently for decision-making.
