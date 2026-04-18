@@ -104,8 +104,8 @@ The current prototype processes a substantial subset of NASA space biology liter
 
 - **572** full-text publications processed
 - **2,165** section-level evidence spans extracted
-- **173** research gaps identified
 - **1,092** structured claims extracted
+- **173** research gaps identified
 - **28,864** evidence relations mapped
 - **245** OSDR dataset links
 - **156** GeneLab dataset links
